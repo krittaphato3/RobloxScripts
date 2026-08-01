@@ -762,6 +762,14 @@ task.wait(0.25)
 end
 return false
 end
+-- automation-specific connections (killed instantly on stop)
+local _autoBag = {}
+local function trackAuto(c) if c then _autoBag[#_autoBag+1] = c end; return c end
+local function killAuto()
+State.running = false
+for _, c in ipairs(_autoBag) do pcall(function() c:Disconnect() end) end
+_autoBag = {}
+end
 local function startAuto()
 if State.running then return end
 if #selectedHerbsSorted() == 0 then
@@ -795,14 +803,6 @@ if updateStatus then updateStatus() end
 if toast then toast("automation stopped", "info") end
 if log   then log("automation STOP", "info") end
 end))
-end
--- automation-specific connections (killed instantly on stop)
-local _autoBag = {}
-local function trackAuto(c) if c then _autoBag[#_autoBag+1] = c end; return c end
-local function killAuto()
-State.running = false
-for _, c in ipairs(_autoBag) do pcall(function() c:Disconnect() end) end
-_autoBag = {}
 end
 local function stopAuto()
 killAuto()
@@ -2203,22 +2203,19 @@ tpBtn.MouseButton1Click:Connect(function()
 local found = false
 pcall(function()
 local regions = Workspace:FindFirstChild("ForagingRegions")
-if regions then
+if not regions then return end
 for _, c in ipairs(regions:GetDescendants()) do
-if c:IsA("Model") or c:IsA("Folder") then
+if not (c:IsA("Model") or c:IsA("Folder")) then continue end
 local n = c.Name:lower()
-if n:find("zone", 1, true) or n:find("band", 1, true) then
+if not (n:find("zone", 1, true) or n:find("band", 1, true)) then continue end
 local attrs = c:GetAttributes()
-if attrs and attrs.Multiplier == z.mult then
+if not (attrs and attrs.Multiplier == z.mult) then continue end
 local root = c:FindFirstChild("Root") or c:FindFirstChildWhichIsA("BasePart")
 if root then
 teleportToTarget(root.Position)
 found = true
 if toast then toast("TP to " .. fmtN(z.mult) .. "× zone", "good") end
 break
-end
-end
-end
 end
 end
 end)
