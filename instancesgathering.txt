@@ -1,0 +1,422 @@
+--[[
+    MOMO'S INSTANCE GATHERER v3 (focused)
+    ======================================
+    Only gathers what matters: remotes, herbs, modules, attributes, spy.
+    Output: workspace/mimoinstancessaved.txt
+]]
+
+print("[G] Starting...")
+
+local HttpService = game:GetService("HttpService")
+local Players     = game:GetService("Players")
+local Replicated  = game:GetService("ReplicatedStorage")
+local Workspace   = game:GetService("Workspace")
+local lp          = Players.LocalPlayer
+
+local KEYWORDS = {
+    "qi","rate","multi","cultivat","breakthrough","farm","exp","level",
+    "upgrade","damage","health","speed","cooldown","cost","price","reward",
+    "drop","loot","chance","luck","crit","bonus","cap","max","min",
+    "token","hold","duration","harvest","forage","herb","root","mastery",
+    "start_harvest","finish_harvest","inventory","save","load","datastore",
+}
+
+local out = {}
+local lc = 0
+local function F(t,...) local a={...} for i=1,select('#',...) do if a[i]==nil then a[i]="nil" end end return t:format(unpack(a)) end
+local function log(s) lc=lc+1; out[lc]=s end
+local function sec(t) log(""); log(("="):rep(60)); log("  "..t:upper()); log(("="):rep(60)); log(""); print("[G] >>> "..t) end
+local function sub(t) log(""); log("-- "..t.." --") end
+local function sg(o,p) local ok,v=pcall(function() return o[p] end); return ok and v or nil end
+local function fp(o) local ok,p=pcall(function() return o:GetFullName() end); return ok and p or tostring(o) end
+local function cn(o) local ok,c=pcall(function() return o.ClassName end); return ok and c or "?" end
+local tpack=table.pack or function(...)return{n=select('#',...),...}end
+local function tlen(t) local n=0; for _ in pairs(t) do n=n+1 end; return n end
+
+-- ============================================================
+-- 1: ENVIRONMENT
+-- ============================================================
+sec("Environment")
+log("Executor: "..tostring(identifyexecutor and identifyexecutor() or "?"))
+log("Game: "..tostring(sg(game,"Name")))
+log("PlaceId: "..tostring(sg(game,"PlaceId")))
+log("Player: "..tostring(lp and lp.Name or "?"))
+log("UserId: "..tostring(lp and lp.UserId or "?"))
+log("Time: "..os.date("%Y-%m-%d %H:%M:%S"))
+
+-- capabilities
+sub("Caps")
+for _,c in ipairs({"writefile","readfile","decompile","getscriptbytecode","getgc","getconnections","hookmetamethod","getnamecallmethod","setclipboard"}) do
+    local f=false; pcall(function() f=type(_G[c])=="function" end)
+    log(F("  %-24s %s",c,f and "YES" or "no"))
+end
+print("[G] 1 done")
+
+-- ============================================================
+-- 2: REMOTES (all of them)
+-- ============================================================
+sec("Remotes")
+
+local rems = {}
+for _,d in ipairs(Replicated:GetDescendants()) do
+    local c = cn(d)
+    if c=="RemoteEvent" or c=="RemoteFunction" then
+        rems[#rems+1] = d
+        local tag = ""
+        -- check name for action words
+        local nl = d.Name:lower()
+        for _,w in ipairs({"buy","sell","upgrade","claim","reward","start","finish","harvest",
+            "forage","save","load","trade","drop","spawn","teleport","equip","buy","sell",
+            "create","delete","remove","cancel","accept","confirm","update","set","add"}) do
+            if nl:find(w,1,true) then tag=" [ACTION]"; break end
+        end
+        log(F("[%s] %s%s",c,fp(d),tag))
+        if c=="RemoteFunction" then
+            local ok,hi=pcall(function() return d.OnServerInvoke~=nil end)
+            log(F("  ServerInvoke: %s",tostring(hi)))
+        end
+        if c=="RemoteEvent" then
+            local ok,n=pcall(function() return #d:GetConnections() end)
+            log(F("  Connections: %s",tostring(ok and n or "?")))
+        end
+    end
+end
+log(F("Total remotes: %d",#rems))
+print("[G] 2 done")
+
+-- ============================================================
+-- 3: MODULES (net, registry, player_data)
+-- ============================================================
+sec("Modules")
+
+-- try to load key modules
+local net, registry, pdata = nil, nil, nil
+
+sub("Network")
+pcall(function()
+    local nf = Replicated:WaitForChild("Network",3)
+    if nf then
+        for _,c in ipairs(nf:GetDescendants()) do log(F("  [%s] %s",cn(c),c.Name)) end
+        net = require(nf:WaitForChild("network"))
+        if type(net)=="table" then
+            log("  net keys:")
+            for k,v in pairs(net) do log(F("    %s = %s",tostring(k),type(v))) end
+        end
+    else log("  [no folder]") end
+end)
+
+sub("Registry")
+pcall(function()
+    local cf = Replicated:WaitForChild("Client",3)
+    if cf then
+        registry = require(cf:WaitForChild("registry"))
+        if type(registry)=="table" then
+            log("  registry keys:")
+            local n=0
+            for k,v in pairs(registry) do
+                if n<50 then log(F("    %s = %s",tostring(k),type(v))) end
+                n=n+1
+            end
+            if n>50 then log(F("    ...+%d more",n-50)) end
+            -- try get_herb
+            if registry.get_herb then
+                log("  registry.get_herb exists")
+            end
+        end
+    end
+end)
+
+sub("Player Data")
+pcall(function()
+    local cf = Replicated:WaitForChild("Client",3)
+    if cf then
+        pdata = require(cf:WaitForChild("player_data"))
+        if type(pdata)=="table" then
+            log("  pdata keys:")
+            for k,v in pairs(pdata) do log(F("    %s = %s",tostring(k),type(v))) end
+            if pdata.get then
+                log("  --- SNAPSHOTS ---")
+                for _,k in ipairs({"Masteries","Inventory","Stats","Currencies","Settings","Profile","Equipment","Skills","Foraging","Qi","Cultivation","Level","Exp"}) do
+                    pcall(function()
+                        local v = pdata.get(k)
+                        if v~=nil then
+                            log(F("  %s = %s",k,tostring(v)))
+                            if type(v)=="table" then
+                                for k2,v2 in pairs(v) do log(F("    .%s = %s",tostring(k2),tostring(v2))) end
+                            end
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end)
+print("[G] 3 done")
+
+-- ============================================================
+-- 4: HERBS (all instances with full attrs)
+-- ============================================================
+sec("Herb Instances")
+
+local herbs = {}
+local htypes = {}
+
+-- walk workspace for HerbId attribute
+for _,d in ipairs(Workspace:GetDescendants()) do
+    pcall(function()
+        local at = d:GetAttributes()
+        if at and at.HerbId then
+            herbs[#herbs+1] = d
+            local hid = at.HerbId
+            htypes[hid] = (htypes[hid] or 0)+1
+        end
+    end)
+end
+
+log(F("Found %d herb instances, %d types",#herbs,tlen(htypes or {})))
+log("")
+
+-- dump each herb's full attributes
+for _,o in ipairs(herbs) do
+    pcall(function()
+        local at = o:GetAttributes()
+        log(F("[%s] %s",cn(o),fp(o)))
+        for k,v in pairs(at) do
+            log(F("  %s = %s",k,tostring(v)))
+        end
+        log("")
+    end)
+end
+
+sub("Type Summary")
+local st = {}
+for id,n in pairs(htypes) do st[#st+1]={id=id,n=n} end
+table.sort(st,function(a,b) return a.n>b.n end)
+for _,e in ipairs(st) do log(F("  %-25s %d instances",e.id,e.n)) end
+print("[G] 4 done")
+
+-- ============================================================
+-- 5: HERB FOLDERS
+-- ============================================================
+sec("Herb Folders")
+for _,c in ipairs(Workspace:GetChildren()) do
+    if c:IsA("Folder") or c:IsA("Model") then
+        local n=c.Name:lower()
+        if n:find("forag",1,true) or n:find("region",1,true) or n:find("herb",1,true)
+        or n:find("spawn",1,true) or n:find("item",1,true) or n:find("pouch",1,true) then
+            local dc=0; pcall(function() dc=#c:GetDescendants() end)
+            log(F("[%s] %s (%d desc)",cn(c),c.Name,dc))
+            -- list direct children types
+            local childTypes = {}
+            for _,ch in ipairs(c:GetChildren()) do
+                local cc = cn(ch)
+                childTypes[cc] = (childTypes[cc] or 0)+1
+            end
+            for ct,cn2 in pairs(childTypes) do log(F("  %s: %d",ct,cn2)) end
+        end
+    end
+end
+print("[G] 5 done")
+
+-- ============================================================
+-- 6: VALUES (numeric ones that look game-relevant)
+-- ============================================================
+sec("Game-Relevant Values")
+
+for _,d in ipairs(Workspace:GetDescendants()) do
+    local c = cn(d)
+    if c=="NumberValue" or c=="IntValue" then
+        local nl = d.Name:lower()
+        for _,kw in ipairs(KEYWORDS) do
+            if nl:find(kw,1,true) then
+                log(F("[%s] %s = %s",c,fp(d),tostring(sg(d,"Value"))))
+                break
+            end
+        end
+    end
+end
+print("[G] 6 done")
+
+-- ============================================================
+-- 7: ALL ATTRIBUTES (only on models/folders with interesting ones)
+-- ============================================================
+sec("All Attributes")
+local ac=0
+for _,d in ipairs(Workspace:GetDescendants()) do
+    local ok,at = pcall(function() return d:GetAttributes() end)
+    if ok and at then
+        local interesting = false
+        for k,_ in pairs(at) do
+            local kl = k:lower()
+            for _,kw in ipairs(KEYWORDS) do
+                if kl:find(kw,1,true) then interesting=true; break end
+            end
+            if interesting then break end
+        end
+        if interesting then
+            ac=ac+1
+            log(F("[%s] %s",cn(d),fp(d)))
+            for k,v in pairs(at) do log(F("  %s = %s",k,tostring(v))) end
+            log("")
+        end
+    end
+end
+log(F("Interesting attribute sets: %d",ac))
+print("[G] 7 done")
+
+-- ============================================================
+-- 8: DECOMPILE (only LocalScripts under ReplicatedStorage)
+-- ============================================================
+sec("Decompile (RS LocalScripts only)")
+
+local scripts = {}
+for _,d in ipairs(Replicated:GetDescendants()) do
+    if cn(d)=="LocalScript" or cn(d)=="Script" then
+        scripts[#scripts+1] = d
+    end
+end
+log(F("Found %d scripts in RS",#scripts))
+
+local decomp,fail = 0,0
+for i,scr in ipairs(scripts) do
+    if decomp>=100 then log("[CAP 100]"); break end
+    sub(F("[%d/%d] %s",i,#scripts,fp(scr)))
+    local ok,src = pcall(function()
+        if decompile then return decompile(scr) end
+        return nil
+    end)
+    if ok and src and type(src)=="string" and #src>10 then
+        log(src)
+        decomp=decomp+1
+    else
+        local ok2,bc = pcall(function()
+            if getscriptbytecode then return getscriptbytecode(scr) end
+            return nil
+        end)
+        if ok2 and bc and type(bc)=="string" then
+            log(F("[bytecode %d bytes]",#bc))
+            local strs={}
+            for s in bc:gmatch("[\32-\126]{6,}") do strs[#strs+1]=s end
+            for _,s in ipairs(strs) do log("  "..s) end
+            decomp=decomp+1
+        else
+            log("[FAIL]"); fail=fail+1
+        end
+    end
+end
+log(F("Decompiled: %d | Failed: %d",decomp,fail))
+print("[G] 8 done")
+
+-- ============================================================
+-- 9: PLAYER STATE
+-- ============================================================
+sec("Player State")
+if lp then
+    log("Name: "..lp.Name)
+    local ls = lp:FindFirstChild("leaderstats")
+    if ls then
+        sub("Leaderstats")
+        for _,v in ipairs(ls:GetChildren()) do
+            log(F("  %s = %s",v.Name,tostring(sg(v,"Value"))))
+        end
+    end
+    local ch = lp.Character
+    if ch then
+        sub("Character Attrs")
+        local ok,at=pcall(function() return ch:GetAttributes() end)
+        if ok and at then for k,v in pairs(at) do log(F("  %s = %s",k,tostring(v))) end end
+        sub("Character Values")
+        for _,v in ipairs(ch:GetDescendants()) do
+            local c=cn(v)
+            if c=="NumberValue" or c=="IntValue" or c=="StringValue" or c=="BoolValue" then
+                log(F("  [%s] %s = %s",c,v.Name,tostring(sg(v,"Value"))))
+            end
+        end
+        local hum=ch:FindFirstChildOfClass("Humanoid")
+        if hum then
+            log(F("  WalkSpeed: %s",tostring(hum.WalkSpeed)))
+            log(F("  Health: %s/%s",tostring(hum.Health),tostring(hum.MaxHealth)))
+        end
+    end
+end
+print("[G] 9 done")
+
+-- ============================================================
+-- 10: REMOTE SPY (15s)
+-- ============================================================
+sec("Remote Spy (15s)")
+log(">>> FIRE ACTIONS IN GAME NOW!")
+log("")
+
+local spyLog = {}
+
+if hookmetamethod and getnamecallmethod then
+    local old
+    old = hookmetamethod(game,"__namecall",function(self,...)
+        local m=getnamecallmethod()
+        local a={...}
+        if m=="FireServer" or m=="InvokeServer" then
+            local p=fp(self)
+            local as={}
+            for i,av in ipairs(a) do
+                local t=type(av)
+                if t=="table" then as[#as+1]=F("{tbl:%d}",#av)
+                elseif t=="string" then as[#as+1]='"'..av:sub(1,100)..'"'
+                elseif t=="Instance" then as[#as+1]=fp(av)
+                else as[#as+1]=tostring(av) end
+            end
+            local e=F("[FIRE] %s:%s(%s)",p,m,table.concat(as,", "))
+            spyLog[#spyLog+1]=e
+            log(e)
+        end
+        return old(self,...)
+    end)
+
+    for _,r in ipairs(rems) do
+        pcall(function()
+            if cn(r)=="RemoteEvent" then
+                r.OnClientEvent:Connect(function(...)
+                    local a={...}
+                    local as={}
+                    for i,av in ipairs(a) do
+                        local t=type(av)
+                        if t=="table" then as[#as+1]=F("{tbl:%d}",#av)
+                        elseif t=="string" then as[#as+1]='"'..av:sub(1,100)..'"'
+                        elseif t=="Instance" then as[#as+1]=av.Name
+                        else as[#as+1]=tostring(av) end
+                    end
+                    local e=F("[RECV] %s(%s)",fp(r),table.concat(as,", "))
+                    spyLog[#spyLog+1]=e
+                    log(e)
+                end)
+            end
+        end)
+    end
+
+    local t0=tick()
+    while tick()-t0<15 do
+        task.wait(0.5)
+        local el=math.floor(tick()-t0)
+        if el%3==0 and el>0 then print(F("[G] Spy %ds/15s %d events",el,#spyLog)) end
+    end
+    pcall(function() hookmetamethod(game,"__namecall",old) end)
+else
+    log("[SKIP] no hookmetamethod")
+end
+log(F("Spy: %d events",#spyLog))
+print("[G] 10 done")
+
+-- ============================================================
+-- SAVE
+-- ============================================================
+sec("Saving")
+local final = table.concat(out,"\n")
+if writefile then
+    local ok,err = pcall(function() writefile("mimoinstancessaved.txt",final) end)
+    if ok then print("[G] SAVED: workspace/mimoinstancessaved.txt ("..#final.." bytes)")
+    else print("[G] FAILED: "..tostring(err)) end
+else
+    print("[G] no writefile")
+end
+if setclipboard then pcall(function() setclipboard(final) end); print("[G] Copied to clipboard") end
+print("[G] ===== DONE ===== "..lc.." lines")

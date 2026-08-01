@@ -1,0 +1,1511 @@
+--[[
+    ╔══════════════════════════════════════════════════════════════╗
+    ║  JIANGHU CULTIVATION DASHBOARD v2.5 — SETTINGS-NAV FIX      ║
+    ║  Target: The Jianghu | PlaceId: 120591158799124             ║
+    ║  — ENI for LO.                                              ║
+    ║                                                              ║
+    ║  v2.5 FIXES (settings page unreachable / empty):            ║
+    ║   1. PAGE VEIL could stick OPAQUE over the settings region   ║
+    ║      if its fade-out tween stalled → looked like an empty    ║
+    ║      page ("can't get in"). Veil is now NON-BLOCKING and     ║
+    ║      SELF-HEALING: never opaque at rest, soft tint that      ║
+    ║      sweeps OFF, can't capture clicks, plus a hard 0.45s     ║
+    ║      safety timer that force-clears it regardless. A stuck   ║
+    ║      curtain is now structurally impossible (both pages).    ║
+    ║   2. SETTINGS SCROLL used hand-computed canvas height that   ║
+    ║      could collapse to 0 → rows laid out but unscrollable.   ║
+    ║      Now AutomaticCanvasSize = Y (layout drives its own      ║
+    ║      height) + fixed pixel-width rows → always visible &     ║
+    ║      scrollable.                                             ║
+    ║   3. A double-fired tap toggled open-then-closed in one      ║
+    ║      frame = "button does nothing". Nav buttons now carry a  ║
+    ║      200ms debounce lock (double-fire collapses to one       ║
+    ║      toggle), explicit Active, raised z-index, bigger hit    ║
+    ║      area. Added a ✕ close button INSIDE the settings page   ║
+    ║      as an unmistakable leave-affordance + state confirm.    ║
+    ║                                                              ║
+    ║  EVERYTHING ELSE IDENTICAL to v2.4: readout, concave chance  ║
+    ║  model, auto-breakthrough engine, K keybind, resize,         ║
+    ║  minimize, workspace persistence, palette, ambient glows.    ║
+    ║                                                              ║
+    ║  SAFETY CLASS (unchanged, proven): subscribes ONLY to the    ║
+    ║  server's own Cultivation.state_updated push. FIRES ZERO     ║
+      REMOTES except the single paced breakthrough while armed.   ║
+    ║  ZERO HOOKS. Keybind/tweens/resize/settings are 100%         ║
+    ║  client-local. UNLOAD tears all of it down.                  ║
+    ╚══════════════════════════════════════════════════════════════╝
+
+    RUN: paste, execute → panel opens expanded & visible (default key K).
+    Header: [≡ settings]  [– minimize/restore].  Corner grip = resize.
+    Settings page: ✕ or ≡ to leave. Keybind · model · auto-breakthrough ·
+    data — all saved to workspace, reload on rejoin.
+    If the account feels off on login, stop and tell ENI first.
+]]
+
+-- ═══════════════════════════════════════════════════════════
+-- SERVICES
+-- ═══════════════════════════════════════════════════════════
+local Players = game:GetService("Players")
+local UIS     = game:GetService("UserInputService")
+local RS      = game:GetService("ReplicatedStorage")
+local TS      = game:GetService("TweenService")
+local LP      = Players.LocalPlayer
+
+-- ═══════════════════════════════════════════════════════════
+-- SETTINGS (persisted to executor workspace; reload on rejoin)
+-- ═══════════════════════════════════════════════════════════
+local SETTINGS_FILE = "jianghu_cult_settings.cfg"
+local SET = {
+    key = "K", keyEnabled = true,
+    w = 400, h = 540, x = 16, y = 64,
+    mode = "auto",   -- "auto" | "quad" | "linear"
+    win  = 60,       -- chance-model sample window
+    -- v2.4 auto-breakthrough
+    autoBt     = false,  -- master arm (Qi-at-100% by default)
+    autoBtBody = false,  -- ALSO allow Body (LETHAL on fail) — two-step gated
+    minChance  = 0,      -- integer %; 0 = fire at 100% regardless (LO's spec)
+}
+local function loadSettings()
+    local ok, exists = pcall(isfile, SETTINGS_FILE)
+    if not (ok and exists) then return end
+    local ok2, txt = pcall(readfile, SETTINGS_FILE)
+    if not (ok2 and type(txt) == "string" and #txt > 0) then return end
+    local ok3, fn = pcall(loadstring, txt)
+    if not (ok3 and type(fn) == "function") then return end
+    local ok4, t = pcall(fn)
+    if not (ok4 and type(t) == "table") then return end
+    if type(t.key) == "string" then SET.key = t.key end
+    if t.keyEnabled == true or t.keyEnabled == false then SET.keyEnabled = t.keyEnabled end
+    if type(t.w) == "number" and t.w >= 300 and t.w <= 760 then SET.w = math.floor(t.w) end
+    if type(t.h) == "number" and t.h >= 280 and t.h <= 860 then SET.h = math.floor(t.h) end
+    if type(t.x) == "number" then SET.x = math.floor(t.x) end
+    if type(t.y) == "number" then SET.y = math.floor(t.y) end
+    if t.mode == "auto" or t.mode == "quad" or t.mode == "linear" then SET.mode = t.mode end
+    if type(t.win) == "number" and t.win >= 20 and t.win <= 180 then SET.win = math.floor(t.win) end
+    -- v2.4
+    if t.autoBt == true or t.autoBt == false then SET.autoBt = t.autoBt end
+    if t.autoBtBody == true or t.autoBtBody == false then SET.autoBtBody = t.autoBtBody end
+    if type(t.minChance) == "number" then SET.minChance = math.clamp(math.floor(t.minChance), 0, 99) end
+end
+local function serializeSettings()
+    return string.format(
+        'return {key=%q,keyEnabled=%s,w=%d,h=%d,x=%d,y=%d,mode=%q,win=%d,autoBt=%s,autoBtBody=%s,minChance=%d}',
+        SET.key, tostring(SET.keyEnabled), SET.w, SET.h, SET.x, SET.y, SET.mode, SET.win,
+        tostring(SET.autoBt), tostring(SET.autoBtBody), SET.minChance)
+end
+local saveTimer = nil
+local function saveSettings()
+    pcall(writefile, SETTINGS_FILE, serializeSettings())
+end
+local function saveSettingsSoon()
+    if saveTimer then return end
+    saveTimer = task.delay(0.35, function() saveTimer = nil; saveSettings() end)
+end
+loadSettings()
+
+-- ═══════════════════════════════════════════════════════════
+-- PALETTE + TWEEN HELPERS
+-- ═══════════════════════════════════════════════════════════
+local function rgb(r,g,b) return Color3.fromRGB(r,g,b) end
+local C = {
+    panelTop = rgb(26,30,40),
+    panelBot = rgb(14,16,22),
+    header   = rgb(30,34,46),
+    line     = rgb(62,68,86),
+    ink      = rgb(214,222,232),
+    inkDim   = rgb(150,162,178),
+    inkFaint = rgb(104,116,132),
+    good     = rgb(126,214,150),
+    warn     = rgb(224,196,104),
+    bad      = rgb(228,108,104),
+    field    = rgb(15,17,24),
+    rowBase  = rgb(28,32,42),
+    rowHot   = rgb(38,43,57),
+    btn      = rgb(46,51,66),
+    btnHot   = rgb(64,71,90),
+    accent   = rgb(44,78,98),
+    accentHot= rgb(58,98,122),
+    danger   = rgb(120,52,58),
+    dangerHot= rgb(150,64,70),
+}
+local QI   = "rgb(96,200,214)"
+local BODY = "rgb(230,116,110)"
+local DIM  = "rgb(150,162,178)"
+local GOOD = "rgb(126,214,150)"
+local WARN = "rgb(224,196,104)"
+local BAD  = "rgb(228,108,104)"
+local HEAD = "rgb(214,222,232)"
+local QI3   = Color3.fromRGB(96,200,214)
+local BODY3 = Color3.fromRGB(230,116,110)
+
+local liveTweens = {}
+local function tw(obj, props, t, style, dir)
+    if not obj then return nil end
+    local info = TweenInfo.new(t or 0.18, style or Enum.EasingStyle.Quad, dir or Enum.EasingDirection.Out)
+    local tween = TS:Create(obj, info, props)
+    tween:Play()
+    return tween
+end
+local function twLoop(obj, props, t, style)
+    if not obj then return nil end
+    local info = TweenInfo.new(t, style or Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+    local tween = TS:Create(obj, info, props)
+    table.insert(liveTweens, tween)
+    tween:Play()
+    return tween
+end
+local function hover(obj, base, hot)
+    if not obj then return end
+    obj.MouseEnter:Connect(function() tw(obj, {BackgroundColor3 = hot}, 0.12) end)
+    obj.MouseLeave:Connect(function() tw(obj, {BackgroundColor3 = base}, 0.2) end)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- TEXT / NUMBER FORMATTERS
+-- ═══════════════════════════════════════════════════════════
+local function addCommas(n)
+    local s = string.format("%d", math.floor(n + 0.5))
+    local rev = s:reverse():gsub("(%d%d%d)", "%1,"):gsub(",$", "")
+    return rev:reverse()
+end
+local function fmtN(n)
+    if n == nil or n ~= n then return "—" end
+    local a = math.abs(n)
+    if a >= 1e9 then return string.format("%.2fB (%s)", n/1e9, addCommas(n)) end
+    if a >= 1e6 then return string.format("%.2fM (%s)", n/1e6, addCommas(n)) end
+    if a >= 1e3 then return string.format("%.2fK (%s)", n/1e3, addCommas(n)) end
+    return addCommas(n)
+end
+local function fmtRate(n)
+    if n == nil or n ~= n then return "—" end
+    return fmtN(n) .. "/s"
+end
+local function fmtT(s)
+    if s == nil or s ~= s or s >= 1e9 then return "—" end
+    if s <= 0 then return "0s" end
+    local d  = math.floor(s / 86400)
+    local h  = math.floor((s % 86400) / 3600)
+    local m  = math.floor((s % 3600) / 60)
+    local sc = math.floor(s % 60)
+    if d > 0 then return string.format("%dd %dh %dm", d, h, m) end
+    if h > 0 then return string.format("%dh %dm %ds", h, m, sc) end
+    if m > 0 then return string.format("%dm %ds", m, sc) end
+    return string.format("%ds", sc)
+end
+local function pct(x) return string.format("%.1f%%", (x or 0) * 100) end
+local function pctSlope(x) return string.format("%.5f%%/s", (x or 0) * 100) end
+local function col(c, t) return '<font color="' .. c .. '">' .. tostring(t) .. "</font>" end
+local function b(t) return "<b>" .. tostring(t) .. "</b>" end
+local function hero(c, t) return col(c, '<font family="GothamBlack" size="19">' .. tostring(t) .. "</font>") end
+local function heroSm(c, t) return col(c, '<font family="GothamBlack" size="14">' .. tostring(t) .. "</font>") end
+local function label(t) return col("rgb(116,128,146)", '<font family="GothamMedium" size="9">' .. tostring(t) .. "</font>") end
+local function bar(frac, width)
+    width = width or 22
+    if frac ~= frac or frac == nil then frac = 0 end
+    if frac < 0 then frac = 0 end
+    if frac > 1 then frac = 1 end
+    local f = math.floor(frac * width + 0.5)
+    return string.rep("█", f) .. string.rep("░", width - f)
+end
+
+local ROMAN = {[1]="I",[2]="II",[3]="III",[4]="IV",[5]="V",[6]="VI",[7]="VII",[8]="VIII",
+    [9]="IX",[10]="X",[11]="XI",[12]="XII",[13]="XIII",[14]="XIV",[15]="XV",
+    [16]="XVI",[17]="XVII",[18]="XVIII",[19]="XIX",[20]="XX"}
+local function romanVal(t)
+    local map = {I=1,V=5,X=10,L=50,C=100,D=500,M=1000}
+    local total, prev = 0, 0
+    for i = #t, 1, -1 do
+        local v = map[t:sub(i,i)] or 0
+        total = total + (v < prev and -v or v); prev = v
+    end
+    return total
+end
+local function parseStage(stage)
+    if type(stage) ~= "string" then return "", nil end
+    local prefix, tail = stage:match("^(.-)%s+([IVXLCDM]+)$")
+    if not prefix then return stage, nil end
+    return prefix, romanVal(tail)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- STATE  (+ the "None" normalization)
+-- ═══════════════════════════════════════════════════════════
+local running   = true
+local S         = nil
+local S_active  = nil
+local S_idle    = false
+local profile   = {}
+local samples   = {}
+local sampleCap = SET.win
+local lastCost  = nil
+local lastPath  = nil
+local lastPushedCur = nil
+local lastRealPath  = "Qi"
+local obsPath   = nil
+local obs       = { rate = nil, cslope = nil }
+local obsLastT, obsLastCur, obsLastCh = nil, nil, nil
+
+local minimized = false
+local page      = "main"
+local recording = false
+local navLock   = false   -- v2.5: debounce so a double-fired tap can't open+close in one frame
+
+-- v2.4 auto-breakthrough runtime state
+local AUTOBT_COOLDOWN   = 5
+local AUTOBT_BOOT_GRACE = 3
+local autoBtLastFire    = 0
+local autoBtBootT       = 0
+local btAwaiting        = false
+local btAwaitPath       = nil
+local btAwaitStage      = nil
+local btFeedback        = "—"
+local btFlashUntil      = 0
+local bodyConfirmPending = false
+
+local function normPath(p)
+    if type(p) ~= "string" then return nil end
+    local t = p:match("^%s*(.-)%s*$") or p
+    if t == "" or t:lower() == "none" then return nil end
+    return t
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- CHANCE MODEL  (quadratic concave fit over live samples)
+-- ═══════════════════════════════════════════════════════════
+local function solve3(m, t)
+    local M = {
+        {m[1][1],m[1][2],m[1][3],t[1]},
+        {m[2][1],m[2][2],m[2][3],t[2]},
+        {m[3][1],m[3][2],m[3][3],t[3]},
+    }
+    for ccol = 1, 3 do
+        local piv, best = ccol, math.abs(M[ccol][ccol])
+        for r = ccol+1, 3 do
+            local a = math.abs(M[r][ccol])
+            if a > best then best = a; piv = r end
+        end
+        if best < 1e-12 then return nil end
+        if piv ~= ccol then M[ccol], M[piv] = M[piv], M[ccol] end
+        local d = M[ccol][ccol]
+        for r = 1, 3 do
+            if r ~= ccol then
+                local f = M[r][ccol] / d
+                for c2 = ccol, 4 do M[r][c2] = M[r][c2] - f * M[ccol][c2] end
+            end
+        end
+    end
+    return { M[1][4]/M[1][1], M[2][4]/M[2][2], M[3][4]/M[3][3] }
+end
+local function fitChance()
+    local n = #samples
+    if n < 2 then return nil end
+    local S0,S1,S2,S3,S4 = 0,0,0,0,0
+    local T0,T1,T2 = 0,0,0
+    for i = 1, n do
+        local r, ch = samples[i].r, samples[i].ch
+        local r2 = r*r; local r3 = r2*r; local r4 = r3*r
+        S0 = S0+1; S1 = S1+r; S2 = S2+r2; S3 = S3+r3; S4 = S4+r4
+        T0 = T0+ch; T1 = T1+r*ch; T2 = T2+r2*ch
+    end
+    local lin = nil
+    local det2 = S0*S2 - S1*S1
+    if math.abs(det2) > 1e-12 then
+        lin = { (T0*S2 - T1*S1)/det2, (S0*T1 - S1*T0)/det2 }
+    end
+    local quad = nil
+    if n >= 6 then
+        quad = solve3({{S0,S1,S2},{S1,S2,S3},{S2,S3,S4}}, {T0,T1,T2})
+    end
+    return { n = n, lin = lin, quad = quad }
+end
+local function useQuad(fit)
+    if not fit then return false end
+    if SET.mode == "quad" then return fit.quad ~= nil end
+    if SET.mode == "linear" then return false end
+    return (fit.quad ~= nil and fit.n >= 10 and math.abs(fit.quad[3]) > 1e-7)
+end
+local function chanceAtCost(fit)
+    if not fit then return nil, "none" end
+    if useQuad(fit) then
+        local a,b,c = fit.quad[1], fit.quad[2], fit.quad[3]
+        return math.min(1, math.max(0, a+b+c)), "quad"
+    elseif fit.lin then
+        local a,b = fit.lin[1], fit.lin[2]
+        return math.min(1, math.max(0, a+b)), "linear"
+    end
+    return nil, "none"
+end
+local function vertexInfo(fit)
+    if not (fit and fit.quad) then return nil end
+    local a,b,c = fit.quad[1], fit.quad[2], fit.quad[3]
+    if math.abs(c) < 1e-12 then return nil end
+    local rv = -b/(2*c)
+    return { r = rv, ch = math.min(1, math.max(0, a+b*rv+c*rv*rv)), concave = c < 0 }
+end
+local function rForTarget(fit, T, curR)
+    if not fit then return nil, nil end
+    local v = vertexInfo(fit)
+    if useQuad(fit) then
+        local a,b,c = fit.quad[1], fit.quad[2], fit.quad[3]
+        if math.abs(c) < 1e-12 then
+            if math.abs(b) < 1e-12 then return nil, v end
+            return (T-a)/b, v
+        end
+        local disc = b*b - 4*c*(a - T)
+        if disc < 0 then return nil, v end
+        local sq = math.sqrt(disc)
+        local r1 = (-b - sq)/(2*c)
+        local r2 = (-b + sq)/(2*c)
+        local cand = {}
+        if r1 >= curR - 1e-9 then table.insert(cand, r1) end
+        if r2 >= curR - 1e-9 then table.insert(cand, r2) end
+        if #cand == 0 then return nil, v end
+        table.sort(cand)
+        return cand[1], v
+    elseif fit.lin then
+        local a,b = fit.lin[1], fit.lin[2]
+        if math.abs(b) < 1e-12 then return nil, v end
+        return (T-a)/b, v
+    end
+    return nil, v
+end
+local function attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
+    if not rate or rate <= 0 then return nil, "rate0" end
+    if chance and chance >= T then
+        if cost and cur >= cost then return 0, "attempt now" end
+        local t = (cost and cost > 0) and ((cost - cur) / rate) or nil
+        return t, "chance met now; gate = essence"
+    end
+    local rT, v = rForTarget(fit, T, curR)
+    if not rT then
+        if v and v.concave and v.r and v.r >= curR - 1e-9 and v.ch and v.ch < T then
+            return nil, string.format("peaks %.0f%%", v.ch*100)
+        end
+        return nil, "unreachable"
+    end
+    local rUse = math.max(rT, 1)
+    local need = rUse*cost - cur
+    if need < 0 then need = 0 end
+    local t = need / rate
+    local tag = (rT <= 1.0001) and "ok@cost" or "overfill"
+    return t, tag
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- STATE INGEST  (single subscription; pure read; named arg)
+-- ═══════════════════════════════════════════════════════════
+local function getRemote(path)
+    local obj = RS
+    for part in path:gmatch("[^%.]+") do obj = obj and obj:FindFirstChild(part) end
+    return obj
+end
+local stateConn = nil
+local function installState()
+    local r = getRemote("Network.Cultivation.state_updated")
+    if not (r and r:IsA("RemoteEvent")) then return false end
+    stateConn = r.OnClientEvent:Connect(function(payload)   -- named param, NO varargs
+        if type(payload) ~= "table" then return end
+        local realNow = normPath(payload.ActivePath) or normPath(payload.GainPath)
+        if realNow and payload[realNow] then lastRealPath = realNow end
+        local active = (realNow and payload[realNow]) and realNow
+                    or (payload[lastRealPath] and lastRealPath)
+                    or (payload.Qi and "Qi") or (payload.Body and "Body") or lastRealPath
+        local node = payload[active]
+        if not node then return end
+        local cur  = node.Current
+        local cost = node.BreakthroughCost
+        local ch   = node.BreakthroughChance
+        local now  = tick()
+        local idle = (realNow == nil)
+        if active ~= lastPath or (cost and lastCost and math.abs(cost - lastCost) > 1) then
+            samples = {}; lastPath = active; lastCost = cost; lastPushedCur = nil
+            obs.rate, obs.cslope = nil, nil
+            obsLastT, obsLastCur, obsLastCh = nil, nil, nil
+        end
+        lastCost = cost
+        if cur and cost and cost > 0 and ch then
+            if lastPushedCur == nil or math.abs(cur - lastPushedCur) > 0.5 then
+                table.insert(samples, { r = cur / cost, ch = ch })
+                lastPushedCur = cur
+                while #samples > sampleCap do table.remove(samples, 1) end
+            end
+        end
+        if obsLastT and cur and obsLastCur then
+            local dt = now - obsLastT
+            if dt > 0 then
+                local ir = (cur - obsLastCur) / dt
+                obs.rate = obs.rate and (obs.rate*0.7 + ir*0.3) or ir
+                if ch and obsLastCh then
+                    local ic = (ch - obsLastCh) / dt
+                    obs.cslope = obs.cslope and (obs.cslope*0.7 + ic*0.3) or ic
+                end
+            end
+        end
+        obsLastT, obsLastCur, obsLastCh = now, cur, ch
+        S, S_active, S_idle = payload, active, idle
+    end)
+    return true
+end
+local function pollProfile()
+    local char = LP.Character
+    if not char then return end
+    local function ga(n) local ok,v = pcall(function() return char:GetAttribute(n) end); return ok and v or nil end
+    profile.root = ga("Root"); profile.const = ga("Constitution")
+    profile.luck = ga("Luck"); profile.compr = ga("Comprehension")
+    profile.ss   = ga("SpiritStones")
+    profile.mf = ga("MasteryForaging"); profile.ma = ga("MasteryAlchemy")
+    profile.mw = ga("MasteryWeapon");   profile.ms = ga("MasterySkill")
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- GUI REFS
+-- ═══════════════════════════════════════════════════════════
+local gui, panel, ambientA, ambientB, accentLine, statusDot, safeStrip
+local bodyPage, bodyVeil, bigLabel, scroll
+local settingsPage, settingsVeil, settingsScroll, settingsList, settingsCloseBtn
+local minBtn, setBtn, resizeGrip
+local keyBtn, keyToggleBtn, modelBtn, winBtn
+local exportBtn2, unloadBtn2, unloadConfirm = false
+local autoExecToggle, autoExecStatus
+-- v2.4 refs
+local autoBtBar, autoBtPill, btFeedbackLabel
+local conns = {}
+local uisConn = nil
+local lastAccentName = nil
+local function track(c) if c then table.insert(conns, c) end; return c end
+
+-- v2.5: no longer used for sizing (AutomaticCanvasSize drives it); kept as no-op
+local function applySettingsCanvas() end
+
+-- ═══════════════════════════════════════════════════════════
+-- REDRAW  (active is always a real path; idle shows dormant)
+-- ═══════════════════════════════════════════════════════════
+local function redraw()
+    if not bigLabel then return end
+
+    -- v2.4: honest, dynamic SAFE strip
+    if safeStrip then
+        if SET.autoBt then
+            safeStrip.Text = "AUTO-BT ON · paced breakthrough ("
+                .. (SET.autoBtBody and "Qi+Body⚠" or "Qi-only")
+                .. ", ≥" .. SET.minChance .. "%) · else 0 hooks"
+            safeStrip.TextColor3 = C.warn
+        else
+            safeStrip.Text = "SAFE · 0 fires · 0 hooks · reads state_updated only"
+            safeStrip.TextColor3 = C.good
+        end
+    end
+
+    if not S then
+        bigLabel.Text = col(DIM, "waiting for first Cultivation.state_updated…\n(start meditating or wait ~1s)")
+        pcall(function() scroll.CanvasSize = UDim2.new(0,0,0, bigLabel.AbsoluteSize.Y + 24) end)
+        return
+    end
+    local active = S_active or "Qi"
+    local idle   = S_idle
+    local node   = S[active]
+    if not node then
+        bigLabel.Text = col(DIM, "waiting for cultivation data…")
+        pcall(function() scroll.CanvasSize = UDim2.new(0,0,0, bigLabel.AbsoluteSize.Y + 24) end)
+        return
+    end
+
+    local accent  = (active == "Qi") and QI or BODY
+    local accent3 = (active == "Qi") and QI3 or BODY3
+    if active ~= lastAccentName then
+        lastAccentName = active
+        tw(ambientA, {BackgroundColor3 = accent3}, 0.6)
+        tw(ambientB, {BackgroundColor3 = accent3}, 0.6)
+        tw(accentLine, {BackgroundColor3 = accent3}, 0.5)
+    end
+    local gaining = (S.Meditating == true)
+    if statusDot then
+        statusDot.BackgroundColor3 = gaining and C.good or (idle and C.warn or C.inkDim)
+    end
+
+    local cur   = node.Current or 0
+    local cost  = node.BreakthroughCost or 0
+    local gap   = math.max(0, cost - cur)
+    local rate  = S[active .. "EffectiveRate"] or S[active .. "GrowthRate"] or 0
+    local tCost = (rate and rate > 0 and gap > 0) and (gap / rate) or (gap <= 0 and 0 or nil)
+    local chance= node.BreakthroughChance or 0
+    local curR  = (cost and cost > 0) and (cur / cost) or 0
+    local fit   = fitChance()
+    local chCost, modelName = chanceAtCost(fit)
+    local vtx   = vertexInfo(fit)
+
+    local L = {}
+    local stateWord
+    if gaining then
+        stateWord = col(GOOD, "MEDITATING")
+    elseif idle then
+        stateWord = col(WARN, "IDLE") .. col(DIM, " · not cultivating")
+    else
+        stateWord = col(WARN, "IDLE")
+    end
+    table.insert(L, heroSm(accent, active:upper() .. " PATH") .. "   " .. stateWord
+        .. "   " .. col(DIM, "tick=" .. tostring(S.TickMode or "?")))
+
+    local prefix, tailVal = parseStage(node.Stage)
+    local minor = node.Minor or tailVal or 0
+    local major = node.Major or 0
+    local nextLabel
+    if minor < 10 and prefix and prefix ~= "" then
+        nextLabel = col(DIM, prefix .. " " .. (ROMAN[minor+1] or tostring(minor+1)))
+    elseif minor >= 10 then
+        nextLabel = col(WARN, "Major " .. (major+1) .. " · Minor 1  (new tier name not broadcast)")
+    else
+        nextLabel = col(DIM, "Major " .. major .. " · Minor " .. (minor+1))
+    end
+    table.insert(L, label("REALM") .. "  " .. hero(accent, node.Stage or "?")
+        .. "   " .. col(DIM, "M" .. major .. "·m" .. minor) .. "  →  " .. nextLabel)
+
+    local frac = (cost and cost > 0) and (cur / cost) or 0
+    table.insert(L, label("ESSENCE") .. " " .. col(accent, fmtN(cur))
+        .. col(DIM, "   cost ") .. col(HEAD, fmtN(cost)))
+    table.insert(L, col(accent, bar(frac)) .. "  " .. heroSm(HEAD, string.format("%.1f%%", frac*100))
+        .. "   " .. col(DIM, "gap ") .. col(HEAD, fmtN(gap)))
+
+    table.insert(L, label("RATE") .. " " .. col(HEAD, fmtRate(rate)) .. col(DIM, " server")
+        .. "   " .. col(DIM, fmtRate(obs.rate) .. " obs"))
+    table.insert(L, label("TIME → COST") .. "  " .. hero(accent, fmtT(tCost)))
+
+    table.insert(L, label("CHANCE") .. " now " .. col(HEAD, pct(chance))
+        .. "   " .. col(DIM, "Δ " .. pctSlope(obs.cslope) .. " obs"))
+    local chCostLine = label("CHANCE @ COST") .. " " .. col(GOOD, pct(chCost))
+        .. col(DIM, "  (" .. modelName .. " fit, n=" .. (fit and fit.n or 0) .. ")")
+    if vtx and vtx.concave and vtx.ch and vtx.ch < 1 then
+        chCostLine = chCostLine .. col(WARN, "  peak " .. pct(vtx.ch))
+    end
+    table.insert(L, chCostLine)
+
+    table.insert(L, label("ATTEMPT WHEN  ·  " .. modelName .. " model"))
+    for _, T in ipairs({0.80, 0.90, 0.95, 0.99}) do
+        local t, tag = attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
+        local rhs
+        if t == nil then
+            rhs = col(BAD, "—  ") .. col(DIM, "(" .. tostring(tag) .. ")")
+        elseif tag == "attempt now" then
+            rhs = col(GOOD, "now") .. col(DIM, "  (chance & essence both met)")
+        elseif tag == "chance met now; gate = essence" then
+            rhs = col(accent, fmtT(t)) .. col(DIM, "  (chance met now · gate = essence)")
+        elseif tag == "ok@cost" then
+            rhs = col(accent, fmtT(t)) .. col(DIM, "  (chance met by cost · gate = essence)")
+        else
+            rhs = col(accent, fmtT(t)) .. col(WARN, "  (overfill past cost)")
+        end
+        table.insert(L, "   ≥" .. math.floor(T*100) .. "%  →  " .. rhs)
+    end
+    if modelName == "linear" then
+        table.insert(L, col("rgb(96,108,124)",
+            "   linear slope can't see curve-bend near the top;"))
+        table.insert(L, col("rgb(96,108,124)",
+            "   high-% rows are lower bounds until the fit gains curvature."))
+    else
+        table.insert(L, col("rgb(96,108,124)",
+            "   " .. modelName .. " fit over last " .. (fit and fit.n or 0) .. " ticks;"))
+        table.insert(L, col("rgb(96,108,124)",
+            "   values beyond the observed band are an estimate, not a guarantee."))
+    end
+
+    if node.BreakthroughWarning and node.BreakthroughWarning ~= "" then
+        table.insert(L, col(WARN, "⚠ " .. node.BreakthroughWarning))
+    end
+    local lock = S.RealmLocks and S.RealmLocks[active]
+    if lock then table.insert(L, col(BAD, "REALM LOCKED (" .. active .. ")")) end
+
+    table.insert(L, "")
+    table.insert(L, label("TECHNIQUES") .. col(DIM, "  active growth ×" .. tostring(node.TechniqueMultiplier)))
+    local techs = S.Techniques
+    if type(techs) == "table" then
+        local keys = {}
+        for k in pairs(techs) do table.insert(keys, k) end
+        table.sort(keys, function(a,b) return tostring(a) < tostring(b) end)
+        for _, k in ipairs(keys) do
+            local t = techs[k]
+            if type(t) == "table" then
+                local flags = (t.affects_growth and "G" or "") .. (t.affects_recovery and "R" or "")
+                local isActive = (t.path == active and t.affects_growth and t.multiplier == node.TechniqueMultiplier)
+                local mark = isActive and col(GOOD, "  ◄ equipped") or ""
+                local pcol = (t.path == "Qi") and QI or BODY
+                table.insert(L, "   • " .. col(HEAD, tostring(t.name or "?"))
+                    .. "  " .. col(pcol, "×" .. tostring(t.multiplier or "?"))
+                    .. "  " .. col(DIM, "[" .. flags .. "]") .. mark)
+            end
+        end
+    end
+
+    local zq = S.ZoneMultiplierQi or 0
+    local zb = S.ZoneMultiplierBody or 0
+    local hereMult = (active == "Qi") and zq or zb
+    local majQi   = (S.Qi and S.Qi.Major) or 0
+    local majBody = (S.Body and S.Body.Major) or 0
+    table.insert(L, "")
+    table.insert(L, label("ZONES") .. col(DIM, "  in band ") .. heroSm(accent, fmtN(hereMult) .. "×")
+        .. col(DIM, "   Qi " .. fmtN(zq) .. "× · Body " .. fmtN(zb) .. "×   [req≈Major]"))
+    local ZONES = {
+        {mult=5,req=0,path="Qi"},{mult=1000,req=1,path="All"},{mult=10000,req=6,path="Qi"},
+        {mult=50000,req=10,path="Qi"},{mult=100000,req=15,path="Qi"},{mult=5000000,req=23,path="Qi"},
+        {mult=5,req=0,path="Body"},{mult=10000,req=6,path="Body"},{mult=50000,req=10,path="Body"},
+        {mult=100000,req=15,path="Body"},{mult=5000000,req=25,path="Body"},
+    }
+    local function qual(p, req)
+        if p == "All" then return majQi >= req and majBody >= req end
+        if p == "Qi" then return majQi >= req end
+        return majBody >= req
+    end
+    local function zrow(z)
+        local q = qual(z.path, z.req)
+        local here = (z.mult == hereMult and (z.path == active or z.path == "All"))
+        local arrow = here and col(accent, b("  ◄ you")) or ""
+        local tag = (z.path == "All") and col(DIM, "all") or col(accent, z.path:lower())
+        local mt = here and heroSm(accent, fmtN(z.mult) .. "×") or col(HEAD, fmtN(z.mult) .. "×")
+        return "   " .. (q and col(GOOD, "✓") or col(DIM, "·")) .. " " .. mt
+            .. col(DIM, "  req" .. z.req .. " ") .. tag .. arrow
+    end
+    for _, z in ipairs(ZONES) do if z.path == "All" then table.insert(L, zrow(z)) end end
+    local actRows = {}
+    for _, z in ipairs(ZONES) do if z.path == active then table.insert(actRows, z) end end
+    table.sort(actRows, function(a,b) return a.mult < b.mult end)
+    for _, z in ipairs(actRows) do table.insert(L, zrow(z)) end
+    local oth = (active == "Qi") and "Body" or "Qi"
+    local oAcc = (oth == "Qi") and QI or BODY
+    local oNode = S[oth]
+    local oParts = {}
+    for _, z in ipairs(ZONES) do
+        if z.path == oth then
+            table.insert(oParts, (qual(z.path, z.req) and col(GOOD, "✓") or col(DIM, "·"))
+                .. col(oAcc, fmtN(z.mult) .. "×") .. col(DIM, "(" .. z.req .. ")"))
+        end
+    end
+    table.insert(L, col(DIM, "▹ " .. oth:upper()) .. "  "
+        .. col(oAcc, oNode and (oNode.Stage or "?") or "?")
+        .. "  " .. col(DIM, "chance ") .. col(HEAD, oNode and pct(oNode.BreakthroughChance) or "—")
+        .. "   " .. table.concat(oParts, "  "))
+
+    table.insert(L, "")
+    table.insert(L, label("PROFILE"))
+    table.insert(L, col(DIM, "Root ") .. col(HEAD, tostring(profile.root or "?"))
+        .. col(DIM, "  Const ") .. col(HEAD, tostring(profile.const or "?"))
+        .. col(DIM, "  Luck ") .. col(HEAD, tostring(profile.luck or "?"))
+        .. col(DIM, "  Compr ") .. col(HEAD, tostring(profile.compr or "?")))
+    table.insert(L, col(DIM, "Mastery  Forage ") .. col(HEAD, tostring(profile.mf or "?"))
+        .. col(DIM, "  Alch ") .. col(HEAD, tostring(profile.ma or "?"))
+        .. col(DIM, "  Weapon ") .. col(HEAD, tostring(profile.mw or "?"))
+        .. col(DIM, "  Skill ") .. col(HEAD, tostring(profile.ms or "?")))
+    local sp = S.Spirit
+    table.insert(L, col(DIM, "SpiritStones ") .. col(HEAD, tostring(profile.ss or "?"))
+        .. col(DIM, "   Spirit ") .. col(HEAD, (sp and tostring(sp.Current) or "?") .. "/" .. (sp and tostring(sp.Max) or "?")))
+
+    bigLabel.Text = table.concat(L, "\n")
+    pcall(function() scroll.CanvasSize = UDim2.new(0,0,0, bigLabel.AbsoluteSize.Y + 24) end)
+
+    -- v2.4: living auto-bt pill + feedback line
+    if autoBtPill then
+        local liveCh = nil
+        local ra = normPath(S.ActivePath or S.GainPath)
+        if ra and S[ra] then liveCh = S[ra].BreakthroughChance end
+        if SET.autoBt then
+            local chTxt = liveCh and (" · now " .. pct(liveCh)) or ""
+            autoBtPill.Text = "AUTO-BT  ON   " .. (ra or active) .. "≥100%"
+                .. (SET.autoBtBody and "  +BODY⚠" or "") .. chTxt
+            autoBtPill.BackgroundColor3 = (tick() < btFlashUntil) and rgb(70,170,100) or rgb(40,96,64)
+            autoBtPill.TextColor3 = rgb(225,255,235)
+        else
+            autoBtPill.Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)"
+            autoBtPill.BackgroundColor3 = rgb(46,51,66)
+            autoBtPill.TextColor3 = rgb(150,162,178)
+        end
+    end
+    if btFeedbackLabel then
+        btFeedbackLabel.Text = btFeedback
+        btFeedbackLabel.TextColor3 = (tick() < btFlashUntil) and C.good or C.inkDim
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- GUI BUILD
+-- ═══════════════════════════════════════════════════════════
+local function mk(cls, props, parent)
+    local o = Instance.new(cls)
+    for k,v in pairs(props) do o[k] = v end
+    if parent then o.Parent = parent end
+    return o
+end
+local function mkBtn(text, parent, base)
+    local b = mk("TextButton", {
+        Text = text, TextColor3 = C.ink, TextSize = 13,
+        Font = Enum.Font.GothamSemibold, AutoButtonColor = false,
+        BackgroundColor3 = base or C.btn, BorderSizePixel = 0,
+    }, parent)
+    mk("UICorner", {CornerRadius = UDim.new(0,7)}, b)
+    return b
+end
+local function mkIcon(sym, parent, base)
+    local b = mk("TextButton", {
+        Text = sym, TextColor3 = C.inkDim, TextSize = 15,
+        Font = Enum.Font.GothamBold, AutoButtonColor = false,
+        BackgroundColor3 = base or C.header, BorderSizePixel = 0,
+    }, parent)
+    mk("UICorner", {CornerRadius = UDim.new(0,6)}, b)
+    return b
+end
+local function makeVeil(parent)
+    -- v2.5: rest state fully transparent + never Active → can NEVER block clicks
+    -- or hide content even if a tween misbehaves.
+    local v = mk("Frame", {
+        Size = UDim2.new(1,0,1,0), BackgroundColor3 = C.field,
+        BorderSizePixel = 0, Transparency = 1, Visible = false,
+        ZIndex = 9, Active = false,
+    }, parent)
+    return v
+end
+-- v2.5: NON-BLOCKING, SELF-HEALING page sweep. Never opaque at rest; a soft
+-- tint that fades OUT; a hard safety timer force-clears it no matter what.
+local function pageIn(veil)
+    if not veil then return end
+    veil.Active = false
+    veil.Transparency = 0.5
+    veil.Visible = true
+    local t = tw(veil, {Transparency = 1}, 0.28)
+    if t then
+        task.spawn(function()
+            pcall(function() t.Completed:Wait() end)
+            veil.Visible = false; veil.Transparency = 1
+        end)
+    end
+    task.delay(0.45, function()   -- safety net: the veil can never stick as a sheet
+        if veil then veil.Visible = false; veil.Transparency = 1 end
+    end)
+end
+local function getGuiParent()
+    local ok, r
+    if gethui then ok, r = pcall(gethui); if ok and r then return r end end
+    ok, r = pcall(function() return game:GetService("CoreGui") end)
+    if ok and r then return r end
+    ok, r = pcall(function() return LP:WaitForChild("PlayerGui") end)
+    return ok and r or nil
+end
+local function destroyExistingGui()
+    pcall(function()
+        local parents = {}
+        if gethui then local ok,r = pcall(gethui); if ok and r then table.insert(parents, r) end end
+        pcall(function() table.insert(parents, game:GetService("CoreGui")) end)
+        pcall(function() local pg = LP:FindFirstChildOfClass("PlayerGui"); if pg then table.insert(parents, pg) end end)
+        for _, p in ipairs(parents) do
+            for _, g in ipairs(p:GetChildren()) do
+                if g.Name == "JianghuCultENI" then g:Destroy() end
+            end
+        end
+    end)
+end
+
+-- v2.5: rows get fixed pixel width + a touch more height so they always render
+local function sRow(title, parent)
+    local row = mk("Frame", {
+        Size = UDim2.new(1,-16,0,40), BackgroundColor3 = C.rowBase, BorderSizePixel = 0,
+    }, parent)
+    mk("UICorner", {CornerRadius = UDim.new(0,7)}, row)
+    mk("TextLabel", {
+        Size = UDim2.new(0.55,-8,1,0), Position = UDim2.new(0,10,0,0),
+        BackgroundTransparency = 1, Text = title, TextColor3 = C.ink,
+        TextSize = 12, Font = Enum.Font.GothamMedium,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, row)
+    hover(row, C.rowBase, C.rowHot)
+    return row
+end
+local function sNote(text, parent)
+    local t = mk("TextLabel", {
+        Size = UDim2.new(1,-16,0,0), AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1, Text = text, TextColor3 = C.inkFaint,
+        TextSize = 10, Font = Enum.Font.Gotham, TextWrapped = true,
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, parent)
+    return t
+end
+
+local function buildGui()
+    local parent = getGuiParent()
+    if not parent then warn("[CULT] no gui parent"); return false end
+    gui = mk("ScreenGui", {Name="JianghuCultENI", ResetOnSpawn=false,
+        ZIndexBehavior=Enum.ZIndexBehavior.Sibling, IgnoreGuiInset=true}, parent)
+    panel = mk("Frame", {
+        Name="Panel", Size=UDim2.new(0,SET.w,0,SET.h),
+        Position=UDim2.new(0,SET.x,0,SET.y), BackgroundColor3=C.panelBot,
+        BorderSizePixel=0, Active=true, ClipsDescendants=true, ZIndex=1,
+    }, gui)
+    mk("UICorner", {CornerRadius=UDim.new(0,13)}, panel)
+    mk("UIStroke", {Color=C.line, Thickness=1, Transparency=0.25}, panel)
+    mk("UIGradient", {Color = ColorSequence.new(C.panelTop, C.panelBot), Rotation = 90}, panel)
+
+    local function softGlow(pos, size, rot)
+        local g = mk("Frame", {Size=UDim2.new(0,size,0,size), Position=pos,
+            BackgroundColor3=QI3, BackgroundTransparency=0.86, BorderSizePixel=0, ZIndex=0}, panel)
+        mk("UICorner", {CornerRadius=UDim.new(1,0)}, g)
+        mk("UIGradient", {
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.35),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Rotation = rot,
+        }, g)
+        return g
+    end
+    ambientA = softGlow(UDim2.new(0,-70,0,-40), 210, 35)
+    ambientB = softGlow(UDim2.new(1,-120,1,-80), 170, 215)
+    twLoop(ambientA, {Position=UDim2.new(0,30,0,10)}, 7)
+    twLoop(ambientB, {Position=UDim2.new(1,-180,1,-150)}, 9)
+
+    local header = mk("Frame", {
+        Size=UDim2.new(1,0,0,40), Position=UDim2.new(0,0,0,0),
+        BackgroundColor3=C.header, BorderSizePixel=0, ZIndex=3}, panel)
+    statusDot = mk("Frame", {Size=UDim2.new(0,9,0,9), Position=UDim2.new(0,12,0.5,-4),
+        BackgroundColor3=C.good, BorderSizePixel=0, ZIndex=4}, header)
+    mk("UICorner", {CornerRadius=UDim.new(1,8)}, statusDot)
+    twLoop(statusDot, {BackgroundTransparency=0.5}, 1.1)
+    mk("TextLabel", {Size=UDim2.new(1,-150,1,0), Position=UDim2.new(0,28,0,0),
+        BackgroundTransparency=1, Text="CULTIVATION DASHBOARD",
+        TextColor3=C.ink, TextSize=13, Font=Enum.Font.GothamBlack,
+        TextXAlignment=Enum.TextXAlignment.Left, ZIndex=4}, header)
+    mk("TextLabel", {Size=UDim2.new(0,40,1,0), Position=UDim2.new(1,-150,0,0),
+        BackgroundTransparency=1, Text="ENI", TextColor3=C.inkFaint,
+        TextSize=10, Font=Enum.Font.GothamMedium,
+        TextXAlignment=Enum.TextXAlignment.Right, ZIndex=4}, header)
+    -- v2.5: bigger hit area, explicit Active, raised z so ≡ / – are unmissable
+    setBtn = mkIcon("≡", header, C.header)
+    setBtn.Size=UDim2.new(0,34,0,30); setBtn.Position=UDim2.new(1,-80,0.5,-15)
+    setBtn.ZIndex=6; setBtn.Active=true
+    minBtn = mkIcon("–", header, C.header)
+    minBtn.Size=UDim2.new(0,34,0,30); minBtn.Position=UDim2.new(1,-42,0.5,-15)
+    minBtn.ZIndex=6; minBtn.Active=true
+    hover(setBtn, C.header, C.btnHot); hover(minBtn, C.header, C.btnHot)
+    accentLine = mk("Frame", {Size=UDim2.new(1,0,0,2), Position=UDim2.new(0,0,1,-2),
+        BackgroundColor3=QI3, BorderSizePixel=0, ZIndex=4}, header)
+    local glow = mk("Frame", {Size=UDim2.new(0.3,0,1,0), BackgroundColor3=rgb(255,255,255),
+        BackgroundTransparency=0.55, BorderSizePixel=0, ZIndex=5}, accentLine)
+    mk("UICorner", {CornerRadius=UDim.new(1,4)}, glow)
+    twLoop(glow, {Position=UDim2.new(0.7,0,0,0)}, 2.6)
+    pcall(function()
+        local dragging, dragStart, startPos
+        header.InputBegan:Connect(function(inp)
+            if minimized then return end
+            if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+                dragging=true; dragStart=inp.Position; startPos=panel.Position
+            end
+        end)
+        header.InputEnded:Connect(function(inp)
+            if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+                if dragging then dragging=false; SET.x=math.floor(panel.Position.X.Offset); SET.y=math.floor(panel.Position.Y.Offset); saveSettingsSoon() end
+            end
+        end)
+        track(UIS.InputChanged:Connect(function(inp)
+            if dragging and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
+                local d = inp.Position - dragStart
+                panel.Position = UDim2.new(0, startPos.X.Offset + d.X, 0, startPos.Y.Offset + d.Y)
+            end
+        end))
+    end)
+
+    safeStrip = mk("TextLabel", {Size=UDim2.new(1,-24,0,18), Position=UDim2.new(0,12,0,42),
+        BackgroundTransparency=1, Text="SAFE · 0 fires · 0 hooks · reads state_updated only",
+        TextColor3=C.good, TextSize=10, Font=Enum.Font.GothamSemibold,
+        TextXAlignment=Enum.TextXAlignment.Left, ZIndex=3}, panel)
+
+    -- BODY PAGE (data)
+    bodyPage = mk("Frame", {Size=UDim2.new(1,0,1,-74), Position=UDim2.new(0,0,0,62),
+        BackgroundTransparency=1, ZIndex=2}, panel)
+
+    -- v2.4: auto-bt control bar (the requested button) at the top of the body page
+    autoBtBar = mk("Frame", {Size=UDim2.new(1,-16,0,30), Position=UDim2.new(0,8,0,2),
+        BackgroundColor3=rgb(20,23,31), BorderSizePixel=0, ZIndex=3}, bodyPage)
+    mk("UICorner", {CornerRadius=UDim.new(0,8)}, autoBtBar)
+    mk("UIStroke", {Color=C.line, Thickness=1, Transparency=0.5}, autoBtBar)
+    autoBtPill = mk("TextButton", {
+        Text="AUTO-BT  OFF   (tap → arm Qi at 100%)", TextColor3=C.inkDim, TextSize=11,
+        Font=Enum.Font.GothamBold, AutoButtonColor=false, BackgroundColor3=rgb(46,51,66),
+        BorderSizePixel=0, Size=UDim2.new(0.62,-6,1,-6), Position=UDim2.new(0,3,0,3),
+        TextXAlignment=Enum.TextXAlignment.Left, TextTruncate=Enum.TextTruncate.AtEnd,
+    }, autoBtBar)
+    mk("UICorner", {CornerRadius=UDim.new(0,6)}, autoBtPill)
+    local pillPad = mk("UIPadding", {}, autoBtPill)
+    pillPad.PaddingLeft = UDim.new(0,8)
+    hover(autoBtPill, rgb(46,51,66), rgb(60,67,84))
+    btFeedbackLabel = mk("TextLabel", {
+        Text="—", TextColor3=C.inkDim, TextSize=10, Font=Enum.Font.Gotham,
+        BackgroundTransparency=1, BorderSizePixel=0, Size=UDim2.new(0.38,-6,1,0),
+        Position=UDim2.new(0.62,0,0,0), TextXAlignment=Enum.TextXAlignment.Right,
+        TextTruncate=Enum.TextTruncate.AtEnd,
+    }, autoBtBar)
+    local fbPad = mk("UIPadding", {}, btFeedbackLabel)
+    fbPad.PaddingRight = UDim.new(0,8)
+
+    -- scroll sits below the control bar
+    scroll = mk("ScrollingFrame", {Size=UDim2.new(1,-16,1,-36), Position=UDim2.new(0,8,0,36),
+        BackgroundColor3=C.field, BackgroundTransparency=0, BorderSizePixel=0,
+        ScrollBarThickness=4, ScrollBarImageColor3=C.line, CanvasSize=UDim2.new(0,0,0,0), ZIndex=2}, bodyPage)
+    mk("UICorner", {CornerRadius=UDim.new(0,9)}, scroll)
+    local pad = mk("UIPadding", {}, scroll)
+    pad.PaddingLeft=UDim.new(0,10); pad.PaddingRight=UDim.new(0,10)
+    pad.PaddingTop=UDim.new(0,10);  pad.PaddingBottom=UDim.new(0,10)
+    bigLabel = mk("TextLabel", {Size=UDim2.new(1,-8,0,0), AutomaticSize=Enum.AutomaticSize.Y,
+        BackgroundTransparency=1, TextColor3=C.ink, TextSize=12, Font=Enum.Font.Code,
+        RichText=true, TextWrapped=true, LineHeight=1.18,
+        TextXAlignment=Enum.TextXAlignment.Left, TextYAlignment=Enum.TextYAlignment.Top, Text="", ZIndex=2}, scroll)
+    bodyVeil = makeVeil(bodyPage)
+
+    -- SETTINGS PAGE
+    settingsPage = mk("Frame", {Size=UDim2.new(1,0,1,-74), Position=UDim2.new(0,0,0,62),
+        BackgroundTransparency=1, Visible=false, ZIndex=2}, panel)
+    mk("TextLabel", {Size=UDim2.new(1,-24,0,22), Position=UDim2.new(0,12,0,0),
+        BackgroundTransparency=1, Text="SETTINGS", TextColor3=C.ink,
+        TextSize=14, Font=Enum.Font.GothamBlack, TextXAlignment=Enum.TextXAlignment.Left, ZIndex=3}, settingsPage)
+    mk("TextLabel", {Size=UDim2.new(1,-24,0,16), Position=UDim2.new(0,12,0,22),
+        BackgroundTransparency=1,
+        Text="Keybind · model · auto-breakthrough · data — saved to workspace, reload on rejoin.",
+        TextColor3=C.inkFaint, TextSize=10, Font=Enum.Font.Gotham,
+        TextXAlignment=Enum.TextXAlignment.Left, ZIndex=3}, settingsPage)
+    -- v2.5: ✕ close affordance INSIDE the settings page (also confirms you're here)
+    settingsCloseBtn = mkIcon("✕", settingsPage, rgb(40,44,56))
+    settingsCloseBtn.Size=UDim2.new(0,30,0,24); settingsCloseBtn.Position=UDim2.new(1,-42,0,0)
+    settingsCloseBtn.ZIndex=5; settingsCloseBtn.Active=true
+    settingsCloseBtn.TextColor3=rgb(200,210,220)
+    hover(settingsCloseBtn, rgb(40,44,56), rgb(74,52,56))
+    -- v2.5: AutomaticCanvasSize = Y lets the layout drive its own height natively
+    settingsScroll = mk("ScrollingFrame", {Size=UDim2.new(1,-16,1,-44), Position=UDim2.new(0,8,0,40),
+        BackgroundColor3=C.field, BackgroundTransparency=0, BorderSizePixel=0,
+        ScrollBarThickness=4, ScrollBarImageColor3=C.line,
+        AutomaticCanvasSize=Enum.AutomaticSize.Y, CanvasSize=UDim2.new(0,0,0,0), ZIndex=2}, settingsPage)
+    mk("UICorner", {CornerRadius=UDim.new(0,9)}, settingsScroll)
+    settingsList = mk("UIListLayout", {Padding=UDim.new(0,6), SortOrder=Enum.SortOrder.LayoutOrder}, settingsScroll)
+    local spad = mk("UIPadding", {}, settingsScroll)
+    spad.PaddingLeft=UDim.new(0,8); spad.PaddingRight=UDim.new(0,8)
+    spad.PaddingTop=UDim.new(0,8);  spad.PaddingBottom=UDim.new(0,8)
+    settingsVeil = makeVeil(settingsPage)
+
+    -- rows parent to settingsScroll (the layout's parent) so they actually show
+    local r1 = sRow("TOGGLE KEYBIND", settingsScroll)
+    keyToggleBtn = mkBtn(SET.keyEnabled and "ON" or "OFF", r1, SET.keyEnabled and rgb(40,90,60) or C.btn)
+    keyToggleBtn.Size=UDim2.new(0,46,0,24); keyToggleBtn.Position=UDim2.new(1,-152,0.5,-12); keyToggleBtn.TextSize=11
+    hover(keyToggleBtn, keyToggleBtn.BackgroundColor3, C.btnHot)
+    keyBtn = mkBtn("KEY  " .. SET.key, r1, C.accent)
+    keyBtn.Size=UDim2.new(0,96,0,24); keyBtn.Position=UDim2.new(1,-100,0.5,-12); keyBtn.TextSize=11
+    hover(keyBtn, C.accent, C.accentHot)
+
+    local r2 = sRow("CHANCE MODEL", settingsScroll)
+    modelBtn = mkBtn(SET.mode:upper(), r2, C.accent)
+    modelBtn.Size=UDim2.new(0,80,0,24); modelBtn.Position=UDim2.new(1,-88,0.5,-12); modelBtn.TextSize=11
+    hover(modelBtn, C.accent, C.accentHot)
+
+    local r3 = sRow("SAMPLE WINDOW", settingsScroll)
+    winBtn = mkBtn(tostring(SET.win), r3, C.accent)
+    winBtn.Size=UDim2.new(0,60,0,24); winBtn.Position=UDim2.new(1,-68,0.5,-12); winBtn.TextSize=11
+    hover(winBtn, C.accent, C.accentHot)
+
+    -- v2.4 settings rows
+    local r8 = sRow("AUTO BREAKTHROUGH", settingsScroll)
+    autoBtSetBtn = mkBtn(SET.autoBt and "ON" or "OFF", r8, SET.autoBt and rgb(40,96,64) or C.btn)
+    autoBtSetBtn.Size=UDim2.new(0,60,0,24); autoBtSetBtn.Position=UDim2.new(1,-68,0.5,-12); autoBtSetBtn.TextSize=11
+    hover(autoBtSetBtn, autoBtSetBtn.BackgroundColor3, C.btnHot)
+    sNote("Fires Cultivation.breakthrough when the cultivated path's essence ≥100%.\nQi-only by default · paced 1 attempt / 5s · 3s boot grace.", settingsScroll)
+
+    local r9 = sRow("INCLUDE BODY", settingsScroll)
+    bodyBtBtn = mkBtn(SET.autoBtBody and "ON ⚠  (tap to disable)" or "OFF (safe)", r9,
+        SET.autoBtBody and rgb(150,64,70) or C.btn)
+    bodyBtBtn.Size=UDim2.new(0,150,0,24); bodyBtBtn.Position=UDim2.new(1,-158,0.5,-12); bodyBtBtn.TextSize=10
+    bodyBtBtn.TextColor3 = SET.autoBtBody and rgb(255,225,225) or C.ink
+    hover(bodyBtBtn, bodyBtBtn.BackgroundColor3, C.btnHot)
+    sNote("DANGER: a failed BODY breakthrough can KILL the character.\nTwo-click confirm to enable. Never a stray tap.", settingsScroll)
+
+    local r10 = sRow("MIN CHANCE", settingsScroll)
+    minChBtn = mkBtn((SET.minChance == 0) and "0% (any)" or (tostring(SET.minChance) .. "%"), r10, C.accent)
+    minChBtn.Size=UDim2.new(0,80,0,24); minChBtn.Position=UDim2.new(1,-88,0.5,-12); minChBtn.TextSize=11
+    hover(minChBtn, C.accent, C.accentHot)
+    sNote("0% = fire the instant the bar hits 100% (your spec).\nRaise it to wait for a safer roll before auto-firing.", settingsScroll)
+
+    local r4 = sRow("WINDOW", settingsScroll)
+    local resetPos = mkBtn("RESET POS", r4, C.btn); resetPos.Size=UDim2.new(0,86,0,24); resetPos.Position=UDim2.new(1,-182,0.5,-12); resetPos.TextSize=11
+    local resetSize = mkBtn("RESET SIZE", r4, C.btn); resetSize.Size=UDim2.new(0,88,0,24); resetSize.Position=UDim2.new(1,-90,0.5,-12); resetSize.TextSize=11
+    hover(resetPos, C.btn, C.btnHot); hover(resetSize, C.btn, C.btnHot)
+
+    local r5 = sRow("DATA", settingsScroll)
+    exportBtn2 = mkBtn("EXPORT", r5, C.accent); exportBtn2.Size=UDim2.new(0,90,0,24); exportBtn2.Position=UDim2.new(1,-98,0.5,-12); exportBtn2.TextSize=11
+    hover(exportBtn2, C.accent, C.accentHot)
+
+    local r6 = sRow("UNLOAD SCRIPT", settingsScroll)
+    unloadBtn2 = mkBtn("UNLOAD", r6, C.danger); unloadBtn2.Size=UDim2.new(0,90,0,24); unloadBtn2.Position=UDim2.new(1,-98,0.5,-12); unloadBtn2.TextSize=11
+    hover(unloadBtn2, C.danger, C.dangerHot)
+
+    local r7 = sRow("AUTO-EXEC ON REJOIN", settingsScroll)
+    autoExecToggle = mkBtn("INSTALL", r7, C.accent); autoExecToggle.Size=UDim2.new(0,80,0,24); autoExecToggle.Position=UDim2.new(1,-88,0.5,-12); autoExecToggle.TextSize=11
+    hover(autoExecToggle, C.accent, C.accentHot)
+    autoExecStatus = sNote("Settings (key/size/pos/auto-bt) already persist & reload on rejoin.\n"
+        .. "For the script itself: save this script's text once as\n"
+        .. "  jianghu_cult_main.luau  in your executor workspace, then\n"
+        .. "press INSTALL to drop a loader into the auto-exec folder.\n"
+        .. "(a running script can't read its own source to self-install)", settingsScroll)
+
+    sNote("Cultivation Dashboard v2.5 — read-only observer + paced auto-breakthrough.\n"
+        .. "Key " .. SET.key .. " toggles this panel. Boot always opens expanded.\n"
+        .. "Stays alive while idle (shows last path, rate 0).", settingsScroll)
+
+    -- resize grip (bottom-right)
+    resizeGrip = mk("Frame", {Size=UDim2.new(0,16,0,16), Position=UDim2.new(1,-16,1,-16),
+        BackgroundTransparency=1, ZIndex=6}, panel)
+    for i = 0, 2 do
+        mk("Frame", {Size=UDim2.new(0,8-i*3,0,2), Position=UDim2.new(1,-(8-i*3)-2,1,-(4+i*4)),
+            BackgroundColor3=C.line, BackgroundTransparency=0.3, BorderSizePixel=0, ZIndex=6}, resizeGrip)
+    end
+    pcall(function()
+        local dragging, startP, startSize
+        resizeGrip.InputBegan:Connect(function(inp)
+            if minimized then return end
+            if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+                dragging=true; startP=inp.Position; startSize=panel.Size
+            end
+        end)
+        resizeGrip.InputEnded:Connect(function(inp)
+            if inp.UserInputType==Enum.UserInputType.MouseButton1 or inp.UserInputType==Enum.UserInputType.Touch then
+                if dragging then dragging=false; SET.w=math.floor(panel.Size.X.Offset); SET.h=math.floor(panel.Size.Y.Offset); saveSettingsSoon() end
+            end
+        end)
+        track(UIS.InputChanged:Connect(function(inp)
+            if dragging and (inp.UserInputType==Enum.UserInputType.MouseMovement or inp.UserInputType==Enum.UserInputType.Touch) then
+                local d = inp.Position - startP
+                local nw = math.clamp(startSize.X.Offset + d.X, 300, 760)
+                local nh = math.clamp(startSize.Y.Offset + d.Y, 280, 860)
+                panel.Size = UDim2.new(0, nw, 0, nh)
+            end
+        end))
+    end)
+
+    return true
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- PAGE / MINIMIZE / VISIBILITY
+-- ═══════════════════════════════════════════════════════════
+local function showPage(p)
+    page = p
+    if bodyPage then bodyPage.Visible = (p == "main") end
+    if settingsPage then settingsPage.Visible = (p == "settings") end
+    if setBtn then setBtn.TextColor3 = (p == "settings") and C.good or C.inkDim end
+    if p == "main" then
+        pageIn(bodyVeil)
+        pcall(function() scroll.CanvasSize = UDim2.new(0,0,0, bigLabel.AbsoluteSize.Y + 24) end)
+    else
+        pageIn(settingsVeil)
+        refreshSettingsTexts()
+    end
+end
+local function setMinimized(m)
+    minimized = m
+    if m then
+        tw(panel, {Size = UDim2.new(0, panel.Size.X.Offset, 0, 40)}, 0.22)
+        if bodyPage then bodyPage.Visible = false end
+        if settingsPage then settingsPage.Visible = false end
+        if safeStrip then safeStrip.Visible = false end
+        if setBtn then setBtn.Visible = false end
+        if resizeGrip then resizeGrip.Visible = false end
+        if minBtn then minBtn.Text = "▢" end
+    else
+        tw(panel, {Size = UDim2.new(0, SET.w, 0, SET.h)}, 0.24)
+        if safeStrip then safeStrip.Visible = true end
+        if setBtn then setBtn.Visible = true end
+        if resizeGrip then resizeGrip.Visible = true end
+        if minBtn then minBtn.Text = "–" end
+        showPage(page)
+    end
+end
+local function toggleVisible()
+    if gui then gui.Enabled = not gui.Enabled end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- SETTINGS ACTIONS
+-- ═══════════════════════════════════════════════════════════
+local function refreshKeyLabel()
+    if keyBtn then
+        keyBtn.Text = recording and "PRESS KEY…" or ("KEY  " .. SET.key)
+        keyBtn.BackgroundColor3 = recording and C.warn or C.accent
+    end
+end
+local function refreshKeyToggle()
+    if keyToggleBtn then
+        keyToggleBtn.Text = SET.keyEnabled and "ON" or "OFF"
+        keyToggleBtn.BackgroundColor3 = SET.keyEnabled and rgb(40,90,60) or C.btn
+    end
+end
+local function cycleModel()
+    if SET.mode == "auto" then SET.mode = "quad"
+    elseif SET.mode == "quad" then SET.mode = "linear"
+    else SET.mode = "auto" end
+    if modelBtn then modelBtn.Text = SET.mode:upper() end
+    saveSettings()
+end
+local function cycleWin()
+    local order = {30, 60, 90, 120, 180}
+    local idx = 1
+    for i, v in ipairs(order) do if v == SET.win then idx = i end end
+    SET.win = order[(idx % #order) + 1]
+    sampleCap = SET.win
+    while #samples > sampleCap do table.remove(samples, 1) end
+    if winBtn then winBtn.Text = tostring(SET.win) end
+    saveSettings()
+end
+-- v2.4: min-chance cycle
+local function cycleMinChance()
+    local order = {0, 50, 70, 80, 90, 95}
+    local idx = 1
+    for i, v in ipairs(order) do if v == SET.minChance then idx = i end end
+    SET.minChance = order[(idx % #order) + 1]
+    refreshSettingsTexts()
+    saveSettings()
+end
+-- v2.5: refresh labels (canvas now self-sizes; helper kept as no-op)
+local function refreshSettingsTexts()
+    if autoBtSetBtn then
+        autoBtSetBtn.Text = SET.autoBt and "ON" or "OFF"
+        autoBtSetBtn.BackgroundColor3 = SET.autoBt and rgb(40,96,64) or C.btn
+        autoBtSetBtn.TextColor3 = SET.autoBt and rgb(225,255,235) or C.ink
+    end
+    if bodyBtBtn then
+        if SET.autoBtBody then
+            bodyBtBtn.Text = "ON ⚠  (tap to disable)"
+            bodyBtBtn.BackgroundColor3 = rgb(150,64,70); bodyBtBtn.TextColor3 = rgb(255,225,225)
+        elseif bodyConfirmPending then
+            bodyBtBtn.Text = "SURE? BODY CAN DIE"
+            bodyBtBtn.BackgroundColor3 = rgb(180,70,76); bodyBtBtn.TextColor3 = rgb(255,235,235)
+        else
+            bodyBtBtn.Text = "OFF (safe)"
+            bodyBtBtn.BackgroundColor3 = C.btn; bodyBtBtn.TextColor3 = C.ink
+        end
+    end
+    if minChBtn then
+        minChBtn.Text = (SET.minChance == 0) and "0% (any)" or (tostring(SET.minChance) .. "%")
+    end
+    applySettingsCanvas()
+end
+
+local function serializeVal(val, depth, seen)
+    depth = depth or 3; seen = seen or {}
+    local t = typeof(val)
+    if t == "nil" then return "nil"
+    elseif t == "boolean" or t == "number" then return tostring(val)
+    elseif t == "string" then
+        if #val > 120 then return string.format("%q...", val:sub(1,120)) end
+        return string.format("%q", val)
+    elseif t == "Instance" then
+        local ok, p = pcall(function() return val:GetFullName() end)
+        return ok and p or val.ClassName
+    elseif t == "table" then
+        if depth <= 0 then return "{...}" end
+        if seen[val] then return "{<cycle>}" end
+        seen[val] = true
+        local parts, n = {}, 0
+        for k, v in pairs(val) do
+            n = n + 1
+            if n > 24 then table.insert(parts, "...+" .. (n-24)) break end
+            table.insert(parts, tostring(k) .. "=" .. serializeVal(v, depth-1, seen))
+        end
+        return "{" .. table.concat(parts, ", ") .. "}"
+    else return string.format("[%s]", t)
+    end
+end
+local function doExport()
+    local fit = fitChance()
+    local chCost, mn = chanceAtCost(fit)
+    local lines = {
+        "JIANGHU CULT DASHBOARD v2.5 — snapshot (read-only + auto-bt state)",
+        "time: " .. os.date("%Y-%m-%d %H:%M:%S UTC"),
+        "active: " .. tostring(S_active) .. "  idle: " .. tostring(S_idle)
+            .. "  model: " .. tostring(mn) .. "  n=" .. (fit and fit.n or 0),
+        "autoBt=" .. tostring(SET.autoBt) .. "  autoBtBody=" .. tostring(SET.autoBtBody)
+            .. "  minChance=" .. tostring(SET.minChance),
+        "settings: " .. serializeSettings(),
+        "---- panel text ----",
+        (bigLabel and bigLabel.Text or "(none)"),
+        "---- raw state_updated (bounded) ----",
+        serializeVal(S, 4),
+    }
+    local content = table.concat(lines, "\n")
+    pcall(function() if setclipboard then setclipboard(content) end end)
+    pcall(function() if writefile then writefile("jianghu_cult.txt", content) end end)
+    if exportBtn2 then
+        local old = exportBtn2.Text
+        exportBtn2.Text = "SAVED ✓"; exportBtn2.BackgroundColor3 = rgb(40,120,80)
+        task.delay(0.9, function() if exportBtn2 then exportBtn2.Text = old; exportBtn2.BackgroundColor3 = C.accent end end)
+    end
+end
+local function tryAutoExec()
+    local loader =
+        "-- jianghu cult auto-loader (written by ENI dashboard)\n" ..
+        "pcall(function()\n" ..
+        "  local ok, src = pcall(readfile, \"jianghu_cult_main.luau\")\n" ..
+        "  if ok and src and #src > 0 then\n" ..
+        "    local fn = loadstring(src)\n" ..
+        "    if fn then pcall(fn) end\n" ..
+        "  end\n" ..
+        "end)\n"
+    local tried, done = {}, {}
+    for _, p in ipairs({"autoexec/jianghu_cult_loader.luau", "AutoExec/jianghu_cult_loader.luau", "autoexec\\jianghu_cult_loader.luau"}) do
+        table.insert(tried, p)
+        local ok = pcall(writefile, p, loader)
+        if ok then table.insert(done, p) end
+    end
+    if autoExecStatus then
+        if #done > 0 then
+            autoExecStatus.Text = "Loader written to: " .. table.concat(done, ", ") ..
+                "\nNow save THIS script's text as  jianghu_cult_main.luau  in your\n" ..
+                "executor workspace (one time). It will run on every rejoin."
+            autoExecStatus.TextColor3 = C.good
+        else
+            autoExecStatus.Text = "Couldn't write a loader (tried: " .. table.concat(tried, ", ") ..
+                ").\nDo it by hand: drop this script into your executor's auto-exec\n" ..
+                "folder as  jianghu_cult_main.luau  — settings still persist either way."
+            autoExecStatus.TextColor3 = C.warn
+        end
+    end
+    applySettingsCanvas()
+end
+local function doUnload()
+    running = false
+    for _, c in ipairs(conns) do pcall(function() c:Disconnect() end) end
+    conns = {}
+    if uisConn then pcall(function() uisConn:Disconnect() end); uisConn = nil end
+    if stateConn then pcall(function() stateConn:Disconnect() end); stateConn = nil end
+    for _, t in ipairs(liveTweens) do pcall(function() t:Cancel() end) end
+    liveTweens = {}
+    if saveTimer then pcall(task.cancel, saveTimer); saveTimer = nil end
+    if gui then pcall(function() gui:Destroy() end); gui = nil end
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- WIRING  (v2.5: nav through a debounce lock so a double-fire can't cancel out)
+-- ═══════════════════════════════════════════════════════════
+local function navTo(p)
+    if navLock then return end
+    navLock = true
+    task.delay(0.2, function() navLock = false end)
+    showPage(p)
+end
+local function toggleSettings() navTo(page == "settings" and "main" or "settings") end
+local function toggleMin()
+    if navLock then return end
+    navLock = true
+    task.delay(0.2, function() navLock = false end)
+    setMinimized(not minimized)
+end
+
+local function wire()
+    if setBtn then track(setBtn.MouseButton1Click:Connect(toggleSettings)) end
+    if minBtn then track(minBtn.MouseButton1Click:Connect(toggleMin)) end
+    if settingsCloseBtn then track(settingsCloseBtn.MouseButton1Click:Connect(function() navTo("main") end)) end
+    if keyToggleBtn then track(keyToggleBtn.MouseButton1Click:Connect(function()
+        SET.keyEnabled = not SET.keyEnabled; refreshKeyToggle(); saveSettings()
+    end)) end
+    if keyBtn then track(keyBtn.MouseButton1Click:Connect(function()
+        recording = not recording; refreshKeyLabel()
+    end)) end
+    if modelBtn then track(modelBtn.MouseButton1Click:Connect(cycleModel)) end
+    if winBtn then track(winBtn.MouseButton1Click:Connect(cycleWin)) end
+
+    -- v2.4: main-view pill = one-tap Qi master arm
+    if autoBtPill then track(autoBtPill.MouseButton1Click:Connect(function()
+        SET.autoBt = not SET.autoBt
+        if not SET.autoBt then btAwaiting = false; btFeedback = "auto-bt disarmed" end
+        saveSettings()
+    end)) end
+    -- v2.4: settings mirror toggle
+    if autoBtSetBtn then track(autoBtSetBtn.MouseButton1Click:Connect(function()
+        SET.autoBt = not SET.autoBt
+        if not SET.autoBt then btAwaiting = false end
+        refreshSettingsTexts(); saveSettings()
+    end)) end
+    -- v2.4: BODY lethal — two-step to enable, one tap to disable
+    if bodyBtBtn then track(bodyBtBtn.MouseButton1Click:Connect(function()
+        if SET.autoBtBody then
+            SET.autoBtBody = false; bodyConfirmPending = false
+        else
+            if not bodyConfirmPending then
+                bodyConfirmPending = true
+                task.spawn(function()
+                    task.wait(3)
+                    if bodyConfirmPending then bodyConfirmPending = false; refreshSettingsTexts() end
+                end)
+            else
+                bodyConfirmPending = false; SET.autoBtBody = true
+            end
+        end
+        refreshSettingsTexts(); saveSettings()
+    end)) end
+    -- v2.4: min-chance cycle
+    if minChBtn then track(minChBtn.MouseButton1Click:Connect(cycleMinChance)) end
+
+    if exportBtn2 then track(exportBtn2.MouseButton1Click:Connect(function()
+        pressFlash(exportBtn2, C.accent); doExport()
+    end)) end
+    if unloadBtn2 then track(unloadBtn2.MouseButton1Click:Connect(function()
+        if not unloadConfirm then
+            unloadConfirm = true; unloadBtn2.Text = "SURE?"; unloadBtn2.BackgroundColor3 = C.dangerHot
+            task.delay(2.5, function()
+                if unloadConfirm then unloadConfirm = false; unloadBtn2.Text = "UNLOAD"; unloadBtn2.BackgroundColor3 = C.danger end
+            end)
+        else
+            unloadConfirm = false; doUnload()
+        end
+    end)) end
+    if autoExecToggle then track(autoExecToggle.MouseButton1Click:Connect(function()
+        pressFlash(autoExecToggle, C.accent); tryAutoExec()
+    end)) end
+    -- reset pos/size live on the scroll frame now
+    pcall(function()
+        for _, row in ipairs(settingsScroll:GetChildren()) do
+            if row:IsA("Frame") then
+                for _, ch in ipairs(row:GetChildren()) do
+                    if ch:IsA("TextButton") then
+                        if ch.Text == "RESET POS" then
+                            track(ch.MouseButton1Click:Connect(function()
+                                SET.x, SET.y = 16, 64; panel.Position = UDim2.new(0,16,0,64); saveSettings()
+                            end))
+                        elseif ch.Text == "RESET SIZE" then
+                            track(ch.MouseButton1Click:Connect(function()
+                                SET.w, SET.h = 400, 540; panel.Size = UDim2.new(0,400,0,540); saveSettings()
+                            end))
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
+    uisConn = UIS.InputBegan:Connect(function(inp, gpe)
+        if gpe then return end
+        if recording then
+            if inp.UserInputType == Enum.UserInputType.Keyboard then
+                local kc = inp.KeyCode
+                if kc == Enum.KeyCode.Escape then
+                    recording = false; refreshKeyLabel(); return
+                end
+                local skip = {LeftShift=true,RightShift=true,LeftControl=true,RightControl=true,
+                    LeftAlt=true,RightAlt=true,LeftMeta=true,RightMeta=true,Unknown=true}
+                if not skip[kc] then
+                    SET.key = kc.Name; recording = false; refreshKeyLabel(); saveSettings()
+                end
+            end
+            return
+        end
+        if not SET.keyEnabled then return end
+        if UIS:GetFocusedTextBox() then return end
+        if inp.UserInputType == Enum.UserInputType.Keyboard and inp.KeyCode == Enum.KeyCode[SET.key] then
+            toggleVisible()
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- v2.4 AUTO-BREAKTHROUGH ENGINE
+-- ═══════════════════════════════════════════════════════════
+local function doBreakthrough(path)
+    local r = getRemote("Network.Cultivation.breakthrough")
+    if not r then
+        btFeedback = "no breakthrough remote found"
+        return
+    end
+    pcall(function() r:FireServer(path) end)
+    autoBtLastFire = tick()
+    btAwaiting = true
+    btAwaitPath = path
+    btAwaitStage = (S and S[path] and S[path].Stage) or "?"
+    btFlashUntil = tick() + 1.2
+    local chNow = (S and S[path] and S[path].BreakthroughChance) or 0
+    btFeedback = "fired " .. path .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
+end
+
+local function autoBtLoop()
+    task.spawn(function()
+        while running do
+            task.wait(0.5)
+            if SET.autoBt and S
+               and (tick() - autoBtBootT) >= AUTOBT_BOOT_GRACE
+               and (tick() - autoBtLastFire) >= AUTOBT_COOLDOWN then
+                local realActive = normPath(S.ActivePath or S.GainPath)
+                if realActive then
+                    local node = S[realActive]
+                    if node then
+                        local allowed = (realActive == "Qi")
+                                     or (realActive == "Body" and SET.autoBtBody)
+                        if allowed and node.CanBreakthrough then
+                            local cur  = node.Current or 0
+                            local cost = node.BreakthroughCost or 0
+                            local ch   = node.BreakthroughChance or 0
+                            if cost > 0 and cur >= cost and ch >= (SET.minChance / 100) then
+                                doBreakthrough(realActive)
+                            end
+                        end
+                    end
+                end
+            end
+            if btAwaiting and S and btAwaitPath then
+                local nodeNow = S[btAwaitPath]
+                if nodeNow then
+                    if nodeNow.Stage and nodeNow.Stage ~= btAwaitStage then
+                        btFeedback = "✓ REALM UP → " .. tostring(nodeNow.Stage)
+                        btFlashUntil = tick() + 2.0
+                        btAwaiting = false
+                    elseif (tick() - autoBtLastFire) > 8 then
+                        btFeedback = "roll resolved · essence reset · re-grinding"
+                        btAwaiting = false
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- LOOPS
+-- ═══════════════════════════════════════════════════════════
+local function startLoops()
+    task.spawn(function()
+        local pacc = 0
+        while running do
+            task.wait(0.2)
+            pacc = pacc + 0.2
+            if pacc >= 2 then pacc = 0; pcall(pollProfile) end
+            if page == "main" and not minimized then pcall(redraw) end
+        end
+    end)
+    autoBtLoop()   -- v2.4
+end
+
+-- ═══════════════════════════════════════════════════════════
+-- BOOT  (hardened; always expanded + visible)
+-- ═══════════════════════════════════════════════════════════
+print("[CULT] dashboard v2.5 booting — read-only + paced auto-breakthrough, 0 hooks.")
+destroyExistingGui()
+sampleCap = SET.win
+autoBtBootT = tick()          -- v2.4 boot grace starts now
+local buildOk, buildErr = pcall(buildGui)
+if not buildOk then warn("[CULT] buildGui error (continuing with whatever built): " .. tostring(buildErr)) end
+if gui then
+    pcall(wire)
+    local okSub = installState()
+    pcall(pollProfile)
+    pcall(refreshKeyLabel); pcall(refreshKeyToggle); pcall(refreshSettingsTexts)
+    pcall(showPage, "main")
+    pcall(setMinimized, false)
+    gui.Enabled = true
+    startLoops()
+    if okSub then
+        print("[CULT] subscribed to state_updated. Panel live. Key " .. SET.key
+            .. " toggles. autoBt=" .. tostring(SET.autoBt)
+            .. " body=" .. tostring(SET.autoBtBody) .. " minChance=" .. tostring(SET.minChance) .. "%.")
+    else
+        warn("[CULT] state_updated remote not found — panel will show 'waiting'.")
+        if safeStrip then safeStrip.Text = "WARN · state_updated remote not found"; safeStrip.TextColor3 = C.bad end
+    end
+else
+    warn("[CULT] GUI failed to build entirely.")
+end
+print("[CULT] GUI up. ≡ / ✕ = settings · – = minimize · corner = resize · " .. SET.key .. " = toggle.")
