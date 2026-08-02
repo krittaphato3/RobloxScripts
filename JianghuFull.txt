@@ -2207,15 +2207,14 @@ local cultFitLabel = statsRow("Model", "—", J.silver)
 local cultChanceBar, cultChancePct = statsBar(0, J.gold)
 -- auto-breakthrough
 statsSection("Auto-Breakthrough", J.crimson)
-local btEnableBtn = statsWideBtn("AUTO-BT: OFF", "secondary", function()
+local btEnableBtn, btBodyBtn  -- declare before statsWideBtn so closures capture the upvalue
+btEnableBtn = statsWideBtn("AUTO-BT: OFF", "secondary", function()
 autoBt.enabled = not autoBt.enabled
-if btEnableBtn then
 btEnableBtn.Text = autoBt.enabled and "AUTO-BT: ON" or "AUTO-BT: OFF"
 btEnableBtn.BackgroundColor3 = autoBt.enabled and J.jade or J.charcoal
 if autoBt.enabled then grad(btEnableBtn, J.jade, J.jadeDk, 90) end
-end
 end)
-local btBodyBtn = statsWideBtn("Body: OFF (safe)", "secondary", function()
+btBodyBtn = statsWideBtn("Body: OFF (safe)", "secondary", function()
 if autoBt.bodyEnabled then
 autoBt.bodyEnabled = false
 autoBt.bodyConfirmPending = false
@@ -2335,7 +2334,7 @@ if node then
 local prefix, tailVal = parseStage(node.Stage)
 local minor = node.Minor or tailVal or 0
 local major = node.Major or 0
-cultStageLabel.Text = (node.Stage or "?") .. "  M" .. major .. "·m" .. minor
+cultStageLabel.Text = (node.Stage or "?") .. "  Major " .. major .. " · Minor " .. minor
 local cur = node.Current or 0
 local cost = node.BreakthroughCost or 0
 local gap = math.max(0, cost - cur)
