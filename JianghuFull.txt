@@ -35,9 +35,25 @@ Harvest protocol (from live capture):
 Foraging.start_harvest ( instanceId, token, true, vpX, vpY, depth )
 Foraging.finish_harvest( instanceId, token, true, vpX, vpY, depth )  x2
 ]]
-local ForageKit = (function()
+local ForageKit = nil
+local _bootOk, _bootErr = pcall(function()
+ForageKit = (function()
 local HttpService = game:GetService("HttpService")
+------------------------------------------------------------------ debug helpers
+local _dbgPhase = "init"
+local function dbg(phase)
+_dbgPhase = phase
+print("[Jianghu] phase: " .. phase)
+end
+local function dbgErr(phase, err)
+print("[Jianghu] ERROR in " .. phase .. ": " .. tostring(err))
+local ok, info = pcall(function() return debug.getinfo(2, "nSl") end)
+if ok and info then
+print("[Jianghu]   source: " .. tostring(info.source) .. " line " .. tostring(info.currentline))
+end
+end
 ------------------------------------------------------------------ config
+dbg("config")
 local CONFIG = {
 HerbAttr       = "HerbId",
 RegionRoot     = "ForagingRegions",
@@ -151,6 +167,7 @@ end)
 minMasteryCache[id] = m; return m
 end
 ------------------------------------------------------------------ state
+dbg("state")
 local State = {
 mode = CONFIG.Mode, running = false,
 selectedTypes = {}, herbs = {}, byId = {}, byType = {},
@@ -235,6 +252,7 @@ local tabIndicator = nil  -- jade underline
 local harvestSidebar = nil
 local harvestContent = nil
 ------------------------------------------------------------------ scanner
+dbg("scanner")
 local Scanner = {}
 local function detachRecord(rec)
 if rec and rec.conn then pcall(function() rec.conn:Disconnect() end) end
@@ -430,6 +448,7 @@ end
 end))
 end
 ------------------------------------------------------------------ movement (v6 modes)
+dbg("movement")
 local Move = {}
 -- reuse RaycastParams
 local _groundParams = RaycastParams.new()
@@ -575,6 +594,7 @@ end
 return false
 end
 ------------------------------------------------------------------ harvest
+dbg("harvest")
 local Harvest = {
 lastResult = {},
 collected = {},  -- tracks which instanceIds got finish_harvest (collected)
@@ -810,6 +830,7 @@ persistAutoStart(false)
 saveSettings()
 end
 ------------------------------------------------------------------ UI primitives
+dbg("ui primitives")
 local function mk(cls, props, parent)
 local o = Instance.new(cls)
 for k, v in pairs(props or {}) do pcall(function() o[k] = v end) end
@@ -1458,6 +1479,7 @@ chip.MouseButton1Click:Connect(function() startCapture(action, chip) end)
 return row
 end
 ------------------------------------------------------------------ settings panel
+dbg("settings panel")
 local function buildSettings()
 settingsFrame = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 10}, content.frame)
 local panel = mk("Frame", {Size = UDim2.new(1,0,1,0), Position = UDim2.new(0,0,0,0),
@@ -1914,6 +1936,7 @@ return b
 end
 
 -- ─── CULTIVATION STATE READING ───
+dbg("cultivation state")
 local cultState = nil
 local cultActive = "Qi"
 local cultSamples = {}
@@ -2133,6 +2156,7 @@ return majBody >= req
 end
 
 -- ─── BUILD STATS SECTIONS ───
+dbg("stats page build")
 -- cultivation status
 statsSection("Cultivation Status")
 local cultStatusLabel = statsRow("Status", "waiting for data", J.silver)
@@ -2426,6 +2450,7 @@ if not q then pcall(function() q = queueonteleport end) end
 if q then pcall(q, boot) end
 end
 ------------------------------------------------------------------ wire forward hooks + boot
+dbg("boot")
 log              = guiLog
 updateStatus     = guiUpdateStatus
 onHerbsChanged   = reconcileList
@@ -2585,4 +2610,12 @@ Scan     = function() Scanner.refresh(true) end,
 Show     = function() setVisible(true) end,
 }
 end)()
+end) -- end pcall
+if not _bootOk then
+warn("[Jianghu] BOOT FAILED: " .. tostring(_bootErr))
+local ok2, info = pcall(function() return debug.getinfo(2, "nSl") end)
+if ok2 and info then
+warn("[Jianghu]   source: " .. tostring(info.source) .. " line " .. tostring(info.currentline))
+end
+end
 if getgenv then getgenv().ForageKit = ForageKit end
