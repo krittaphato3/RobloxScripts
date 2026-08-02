@@ -2195,38 +2195,48 @@ local cultChanceBar, cultChancePct = statsBar(0, J.gold)
 statsSection("Auto-Breakthrough", J.crimson)
 local btEnableBtn = statsWideBtn("AUTO-BT: OFF", "secondary", function()
 autoBt.enabled = not autoBt.enabled
+if btEnableBtn then
 btEnableBtn.Text = autoBt.enabled and "AUTO-BT: ON" or "AUTO-BT: OFF"
 btEnableBtn.BackgroundColor3 = autoBt.enabled and J.jade or J.charcoal
 if autoBt.enabled then grad(btEnableBtn, J.jade, J.jadeDk, 90) end
+end
 end)
 local btBodyBtn = statsWideBtn("Body: OFF (safe)", "secondary", function()
 if autoBt.bodyEnabled then
 autoBt.bodyEnabled = false
 autoBt.bodyConfirmPending = false
+if btBodyBtn then
 btBodyBtn.Text = "Body: OFF (safe)"
 btBodyBtn.BackgroundColor3 = J.charcoal
 btBodyBtn.TextColor3 = J.text
+end
 else
 if not autoBt.bodyConfirmPending then
 autoBt.bodyConfirmPending = true
+if btBodyBtn then
 btBodyBtn.Text = "SURE? BODY CAN DIE"
 btBodyBtn.BackgroundColor3 = J.crimson
 btBodyBtn.TextColor3 = J.ink
+end
 task.spawn(function()
 task.wait(3)
 if autoBt.bodyConfirmPending then
 autoBt.bodyConfirmPending = false
+if btBodyBtn then
 btBodyBtn.Text = "Body: OFF (safe)"
 btBodyBtn.BackgroundColor3 = J.charcoal
 btBodyBtn.TextColor3 = J.text
+end
 end
 end)
 else
 autoBt.bodyConfirmPending = false
 autoBt.bodyEnabled = true
+if btBodyBtn then
 btBodyBtn.Text = "Body: ON (lethal!)"
 btBodyBtn.BackgroundColor3 = J.crimson
 btBodyBtn.TextColor3 = J.ink
+end
 end
 end
 end)
@@ -2357,8 +2367,10 @@ autoBt.feedback = "roll resolved · essence reset · re-grinding"
 autoBt.awaiting = false
 end
 end
+if btFeedbackLabel then
 btFeedbackLabel.Text = autoBt.feedback
 btFeedbackLabel.TextColor3 = (tick() < autoBt.flashUntil) and J.jade or J.silver
+end
 -- profile
 pollCultProfile()
 profRootLabel.Text = tostring(cultProfile.root or "—")
