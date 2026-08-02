@@ -35,7 +35,17 @@ Harvest protocol (from live capture):
 Foraging.start_harvest ( instanceId, token, true, vpX, vpY, depth )
 Foraging.finish_harvest( instanceId, token, true, vpX, vpY, depth )  x2
 ]]
-local ForageKit = (function()
+------------------------------------------------------------------ debug gate
+-- Set debug = true before loading to enable phase logging + error capture.
+-- Example:
+--   debug = true
+--   loadstring(game:HttpGet("URL"))()
+------------------------------------------------------------------
+local _fkDebug = (type(debug) == "boolean" and debug) or false
+pcall(function()
+  if _fkDebug then getgenv().ForageKit_Debug = true end
+end)
+local _fkFn = (function()
 local HttpService = game:GetService("HttpService")
 ------------------------------------------------------------------ debug helpers
 local DEBUG = (getgenv and getgenv().ForageKit_Debug) or false
@@ -2610,5 +2620,20 @@ Stop     = stopAuto,
 Scan     = function() Scanner.refresh(true) end,
 Show     = function() setVisible(true) end,
 }
-end)()
+end)
+------------------------------------------------------------------ debug-aware launch
+local ForageKit
+if _fkDebug then
+  print("[Jianghu] Debug mode ON — loading ForageKit v5.13 ...")
+  local _t0 = tick()
+  local _ok, _result = pcall(_fkFn)
+  ForageKit = _result
+  if _ok then
+    print("[Jianghu] Loaded OK in " .. ("%.3f"):format(tick() - _t0) .. "s")
+  else
+    print("[Jianghu] LOAD ERROR: " .. tostring(_result))
+  end
+else
+  ForageKit = _fkFn()
+end
 if getgenv then getgenv().ForageKit = ForageKit end
