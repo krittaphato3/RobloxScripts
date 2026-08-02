@@ -1848,6 +1848,16 @@ mk("UIPadding", {PaddingTop = UDim.new(0,6), PaddingBottom = UDim.new(0,6), Padd
 gui.logFrame = logFrame
 return mainCol
 end
+-- ─── AUTO-BREAKTHROUGH STATE (IIFE body level — accessible everywhere) ───
+local AUTOBT_COOLDOWN   = 5
+local AUTOBT_BOOT_GRACE = 3
+local autoBt = {
+	enabled = false, bodyEnabled = false, minChance = 0,
+	cooldown = AUTOBT_COOLDOWN, lastFire = 0,
+	bootGrace = AUTOBT_BOOT_GRACE, bootTime = 0,
+	awaiting = false, awaitPath = nil, awaitStage = nil,
+	feedback = "—", flashUntil = 0, bodyConfirmPending = false,
+}
 local function buildWindow()
 guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
 IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
@@ -2135,7 +2145,6 @@ cultProfile.mw = ga("MasteryWeapon"); cultProfile.ms = ga("MasterySkill")
 end
 
 -- ─── AUTO-BREAKTHROUGH ENGINE ───
-local autoBt = { enabled = false, bodyEnabled = false, minChance = 0, cooldown = 5, lastFire = 0, bootGrace = 3, bootTime = 0, awaiting = false, feedback = "—" }
 local function doBreakthrough(path)
 local folder = Replicated:FindFirstChild("Network")
 if not folder then autoBt.feedback = "no network"; return end
@@ -2146,8 +2155,11 @@ if not (remote and remote:IsA("RemoteEvent")) then autoBt.feedback = "no breakth
 pcall(function() remote:FireServer(path) end)
 autoBt.lastFire = tick()
 autoBt.awaiting = true
+autoBt.awaitPath = path
 autoBt.awaitStage = (cultState and cultState[path] and cultState[path].Stage) or "?"
-autoBt.feedback = "fired " .. path .. " @ " .. pct((cultState and cultState[path] and cultState[path].BreakthroughChance) or 0)
+autoBt.flashUntil = tick() + 1.2
+local chNow = (cultState and cultState[path] and cultState[path].BreakthroughChance) or 0
+autoBt.feedback = "fired " .. path .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
 end
 
 -- ─── ZONES DATA ───
@@ -2190,14 +2202,32 @@ end)
 local btBodyBtn = statsWideBtn("Body: OFF (safe)", "secondary", function()
 if autoBt.bodyEnabled then
 autoBt.bodyEnabled = false
+autoBt.bodyConfirmPending = false
 btBodyBtn.Text = "Body: OFF (safe)"
 btBodyBtn.BackgroundColor3 = J.charcoal
 btBodyBtn.TextColor3 = J.text
 else
+if not autoBt.bodyConfirmPending then
+autoBt.bodyConfirmPending = true
+btBodyBtn.Text = "SURE? BODY CAN DIE"
+btBodyBtn.BackgroundColor3 = J.crimson
+btBodyBtn.TextColor3 = J.ink
+task.spawn(function()
+task.wait(3)
+if autoBt.bodyConfirmPending then
+autoBt.bodyConfirmPending = false
+btBodyBtn.Text = "Body: OFF (safe)"
+btBodyBtn.BackgroundColor3 = J.charcoal
+btBodyBtn.TextColor3 = J.text
+end
+end)
+else
+autoBt.bodyConfirmPending = false
 autoBt.bodyEnabled = true
 btBodyBtn.Text = "Body: ON (lethal!)"
 btBodyBtn.BackgroundColor3 = J.crimson
-btBodyBtn.TextColor3 = J.text
+btBodyBtn.TextColor3 = J.ink
+end
 end
 end)
 local btFeedbackLabel = statsRow("Feedback", "—", J.silver)
@@ -2316,17 +2346,19 @@ end
 end
 end
 end
-if autoBt.awaiting and cultState then
-local n = cultState[autoBt.awaiting and cultActive]
+if autoBt.awaiting and cultState and autoBt.awaitPath then
+local n = cultState[autoBt.awaitPath]
 if n and n.Stage and n.Stage ~= autoBt.awaitStage then
 autoBt.feedback = "✓ REALM UP → " .. tostring(n.Stage)
+autoBt.flashUntil = tick() + 2.0
 autoBt.awaiting = false
 elseif (tick() - autoBt.lastFire) > 8 then
-autoBt.feedback = "resolved · re-grinding"
+autoBt.feedback = "roll resolved · essence reset · re-grinding"
 autoBt.awaiting = false
 end
 end
 btFeedbackLabel.Text = autoBt.feedback
+btFeedbackLabel.TextColor3 = (tick() < autoBt.flashUntil) and J.jade or J.silver
 -- profile
 pollCultProfile()
 profRootLabel.Text = tostring(cultProfile.root or "—")
@@ -2524,13 +2556,14 @@ end
 end
 end
 end
-if autoBt.awaiting and cultState then
-local node = cultState[cultActive]
+if autoBt.awaiting and cultState and autoBt.awaitPath then
+local node = cultState[autoBt.awaitPath]
 if node and node.Stage and node.Stage ~= autoBt.awaitStage then
 autoBt.feedback = "✓ REALM UP → " .. tostring(node.Stage)
+autoBt.flashUntil = tick() + 2.0
 autoBt.awaiting = false
 elseif (tick() - autoBt.lastFire) > 8 then
-autoBt.feedback = "resolved · re-grinding"
+autoBt.feedback = "roll resolved · essence reset · re-grinding"
 autoBt.awaiting = false
 end
 end
