@@ -256,6 +256,7 @@ local guiRoot = nil
 local activeToasts = {}
 ------------------------------------------------------------------ tab switching state
 local activeTab = "Stats"
+local preSettingsTab = nil  -- save tab before settings opened
 local tabPages = {}       -- tab name -> { contentFrame, sidebarFrame }
 local tabButtons = {}     -- tab name -> TextButton
 local tabIndicator = nil  -- jade underline
@@ -1591,6 +1592,7 @@ refreshSettingsHighlight()
 end
 function openSettings()
 if not settingsFrame then buildSettings() end
+preSettingsTab = activeTab  -- remember which tab we were on
 -- hide main content, show settings
 if harvestSidebar then harvestSidebar.Visible = false end
 if harvestContent then harvestContent.Visible = false end
@@ -1619,18 +1621,26 @@ tw:Play(); tw.Completed:Connect(function()
 settingsFrame.Visible = false
 gui.settingsPanel.Position = UDim2.new(0,0,0,0)
 gui.settingsPanel.BackgroundTransparency = 0
--- restore main content with fade in
+-- restore the tab we were on before settings
+if preSettingsTab and tabPages[preSettingsTab] then
+switchTab(preSettingsTab)
+else
 if harvestSidebar then harvestSidebar.Visible = true end
 if harvestContent then harvestContent.Visible = true end
 if listFrame then listFrame.Visible = true end
 if emptyState and State.lastScanHerbs == 0 then emptyState.Visible = true end
+end
 end)
 else
 settingsFrame.Visible = false
+if preSettingsTab and tabPages[preSettingsTab] then
+switchTab(preSettingsTab)
+else
 if harvestSidebar then harvestSidebar.Visible = true end
 if harvestContent then harvestContent.Visible = true end
 if listFrame then listFrame.Visible = true end
 if emptyState and State.lastScanHerbs == 0 then emptyState.Visible = true end
+end
 end
 end
 ------------------------------------------------------------------ build overlays
@@ -1858,6 +1868,23 @@ local autoBt = {
 	awaiting = false, awaitPath = nil, awaitStage = nil,
 	feedback = "—", flashUntil = 0, bodyConfirmPending = false,
 }
+-- ─── AUTO-BREAKTHROUGH ENGINE (IIFE body level — accessible everywhere) ───
+local function doBreakthrough(path)
+local folder = Replicated:FindFirstChild("Network")
+if not folder then autoBt.feedback = "no network"; return end
+local cultFolder = folder:FindFirstChild("Cultivation")
+if not cultFolder then autoBt.feedback = "no cult folder"; return end
+local remote = cultFolder:FindFirstChild("breakthrough")
+if not (remote and remote:IsA("RemoteEvent")) then autoBt.feedback = "no breakthrough remote"; return end
+pcall(function() remote:FireServer(path) end)
+autoBt.lastFire = tick()
+autoBt.awaiting = true
+autoBt.awaitPath = path
+autoBt.awaitStage = (cultState and cultState[path] and cultState[path].Stage) or "?"
+autoBt.flashUntil = tick() + 1.2
+local chNow = (cultState and cultState[path] and cultState[path].BreakthroughChance) or 0
+autoBt.feedback = "fired " .. path .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
+end
 local function buildWindow()
 guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
 IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
@@ -2134,6 +2161,9 @@ cultState = payload
 end)
 return true
 end
+-- subscribe immediately after definition (inside buildWindow scope)
+local cultOk, cultResult = pcall(installCultState)
+if _fkDebug then print("[Jianghu] installCultState: " .. (cultOk and tostring(cultResult) or "ERROR: " .. tostring(cultResult))) end
 local function pollCultProfile()
 local c = char()
 if not c then return end
@@ -2143,24 +2173,6 @@ cultProfile.luck = ga("Luck"); cultProfile.compr = ga("Comprehension")
 cultProfile.ss = ga("SpiritStones")
 cultProfile.mf = ga("MasteryForaging"); cultProfile.ma = ga("MasteryAlchemy")
 cultProfile.mw = ga("MasteryWeapon"); cultProfile.ms = ga("MasterySkill")
-end
-
--- ─── AUTO-BREAKTHROUGH ENGINE ───
-local function doBreakthrough(path)
-local folder = Replicated:FindFirstChild("Network")
-if not folder then autoBt.feedback = "no network"; return end
-local cultFolder = folder:FindFirstChild("Cultivation")
-if not cultFolder then autoBt.feedback = "no cult folder"; return end
-local remote = cultFolder:FindFirstChild("breakthrough")
-if not (remote and remote:IsA("RemoteEvent")) then autoBt.feedback = "no breakthrough remote"; return end
-pcall(function() remote:FireServer(path) end)
-autoBt.lastFire = tick()
-autoBt.awaiting = true
-autoBt.awaitPath = path
-autoBt.awaitStage = (cultState and cultState[path] and cultState[path].Stage) or "?"
-autoBt.flashUntil = tick() + 1.2
-local chNow = (cultState and cultState[path] and cultState[path].BreakthroughChance) or 0
-autoBt.feedback = "fired " .. path .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
 end
 
 -- ─── ZONES DATA ───
@@ -2428,9 +2440,7 @@ local secs = rt % 60
 end
 end -- updateStatsPage
 
--- install cultivation state listener
-local cultOk, cultResult = pcall(installCultState)
-if _fkDebug then print("[Jianghu] installCultState: " .. (cultOk and tostring(cultResult) or "ERROR: " .. tostring(cultResult))) end
+-- install cultivation state listener (now called inside buildWindow)
 autoBt.bootTime = os.clock()
 tabPages["Stats"] = { contentFrame = statsPage, sidebarFrame = nil }
 statsPage.Visible = true  -- Stats is the default tab
