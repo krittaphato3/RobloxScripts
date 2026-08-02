@@ -35,9 +35,7 @@ Harvest protocol (from live capture):
 Foraging.start_harvest ( instanceId, token, true, vpX, vpY, depth )
 Foraging.finish_harvest( instanceId, token, true, vpX, vpY, depth )  x2
 ]]
-local ForageKit = nil
-local _bootOk, _bootErr = pcall(function()
-ForageKit = (function()
+local ForageKit = (function()
 local HttpService = game:GetService("HttpService")
 ------------------------------------------------------------------ debug helpers
 local _dbgPhase = "init"
@@ -2610,12 +2608,4 @@ Scan     = function() Scanner.refresh(true) end,
 Show     = function() setVisible(true) end,
 }
 end)()
-end) -- end pcall
-if not _bootOk then
-warn("[Jianghu] BOOT FAILED: " .. tostring(_bootErr))
-local ok2, info = pcall(function() return debug.getinfo(2, "nSl") end)
-if ok2 and info then
-warn("[Jianghu]   source: " .. tostring(info.source) .. " line " .. tostring(info.currentline))
-end
-end
 if getgenv then getgenv().ForageKit = ForageKit end
