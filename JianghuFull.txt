@@ -2369,6 +2369,7 @@ local rt = math.floor(os.clock() - statsStartTime)
 local mins = math.floor(rt / 60)
 local secs = rt % 60
 end
+end -- updateStatsPage
 
 -- install cultivation state listener
 pcall(installCultState)
