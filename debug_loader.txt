@@ -1,22 +1,42 @@
 --[[
-  ForageKit Debug Loader
-  ──────────────────────
+  ForageKit Debug Loader v2
+  ─────────────────────────
   Set debug = true BEFORE running this script.
-  It wraps loadstring with compile-error capture and phase tracking.
+  It wraps loadstring with compile-error capture and enables
+  in-script phase logging (with timing).
 
   Usage:
     debug = true
-    loadstring(game:HttpGet("URL_TO_debug_loader.txt"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/debug_loader.txt"))()
 
   Or paste this directly into your executor with debug = true set.
 ]]
+
+-- ─── Detect debug flag ───
+local _dbg = false
+pcall(function()
+  -- Check for global 'debug' variable (executor might restrict this)
+  if type(debug) == "boolean" then _dbg = debug end
+end)
+-- Also check: some executors use getgenv
+if not _dbg then
+  pcall(function() if getgenv().ForageKit_Debug == true then _dbg = true end end)
+end
 
 local _t = tick()
 local function log(msg)
   print(("[Jianghu Debug] %.3fs  %s"):format(tick() - _t, msg))
 end
 
-log("────────── ForageKit Debug Loader ──────────")
+log("────────── ForageKit Debug Loader v2 ──────────")
+log("Debug mode: " .. tostring(_dbg))
+
+-- ─── Enable in-script phase logging ───
+if _dbg then
+  pcall(function() getgenv().ForageKit_Debug = true end)
+  log("ForageKit_Debug flag set in getgenv")
+end
+
 log("Fetching JianghuFull.txt ...")
 
 local ok, src = pcall(function()
@@ -28,54 +48,77 @@ if not ok or not src then
   return
 end
 
-log("Fetched " .. #src .. " bytes (" .. select(2, src:gsub("\n", "")) .. " lines)")
+local lineCount = select(2, src:gsub("\n", ""))
+log("Fetched " .. #src .. " bytes (" .. lineCount .. " lines)")
 
--- Compile
+-- ─── Compile ───
 log("Compiling via loadstring ...")
 local fn, compileErr = loadstring(src)
 
 if not fn then
-  log("═══════ COMPILE ERROR ═══════")
+  log("══════════════════════════════════")
+  log("  COMPILE ERROR")
+  log("══════════════════════════════════")
   log(compileErr or "(nil)")
-  log("═════════════════════════════")
-  -- Try to pinpoint the line
+  -- Pinpoint the line
   local lineNum = compileErr and compileErr:match(":(%d+):")
   if lineNum then
     lineNum = tonumber(lineNum)
-    local lines = src:split("\n")
-    local start = math.max(1, lineNum - 3)
-    local stop = math.min(#lines, lineNum + 3)
+    local lines = {}
+    for line in src:gmatch("[^\n]+") do lines[#lines + 1] = line end
+    local start = math.max(1, lineNum - 4)
+    local stop = math.min(#lines, lineNum + 4)
+    log("")
     log("Context around line " .. lineNum .. ":")
     for i = start, stop do
       local marker = (i == lineNum) and " >> " or "    "
       log(marker .. i .. ": " .. lines[i])
     end
   end
+  log("══════════════════════════════════")
   return
 end
 
 log("Compile OK — executing ...")
 
--- Execute with error wrapping
+-- ─── Execute with error capture ───
 local execOk, execErr = pcall(fn)
 
 if not execOk then
-  log("═══════ RUNTIME ERROR ═══════")
+  log("══════════════════════════════════")
+  log("  RUNTIME ERROR")
+  log("══════════════════════════════════")
   log(tostring(execErr))
-  log("══════════════════════════════")
+  log("══════════════════════════════════")
 else
   log("═══════ EXECUTION OK ═══════")
 end
 
--- Verify ForageKit loaded
+-- ─── Verify ForageKit loaded ───
 local fk = getgenv and getgenv().ForageKit
 if fk then
-  log("ForageKit loaded successfully ✓")
-  log("API: " .. table.concat({
-    "Destroy", "SetMode", "Start", "Stop", "Scan", "Show"
-  }, ", "))
+  log("ForageKit loaded ✓")
+  log("API: Destroy, SetMode, Start, Stop, Scan, Show")
+  -- Run a quick sanity check
+  local checks = {
+    {"Destroy", "function"},
+    {"SetMode", "function"},
+    {"Start", "function"},
+    {"Stop", "function"},
+    {"Scan", "function"},
+    {"Show", "function"},
+  }
+  for _, c in ipairs(checks) do
+    local name, expected = c[1], c[2]
+    local ok2, tp = pcall(function() return type(fk[name]) end)
+    local status = (ok2 and tp == expected) and "✓" or "✗ (" .. tostring(tp) .. ")"
+    log("  " .. name .. ": " .. status)
+  end
 else
   log("WARNING: ForageKit not found in getgenv")
 end
+
+-- ─── Clean up debug flag ───
+pcall(function() getgenv().ForageKit_Debug = nil end)
 
 log("────────── Debug Loader Done ──────────")

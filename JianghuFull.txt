@@ -38,16 +38,18 @@ Foraging.finish_harvest( instanceId, token, true, vpX, vpY, depth )  x2
 local ForageKit = (function()
 local HttpService = game:GetService("HttpService")
 ------------------------------------------------------------------ debug helpers
+local DEBUG = (getgenv and getgenv().ForageKit_Debug) or false
 local _dbgPhase = "init"
+local _dbgT0 = tick()
 local function dbg(phase)
 _dbgPhase = phase
-print("[Jianghu] phase: " .. phase)
+if DEBUG then print(("[Jianghu] %.3fs  phase: %s"):format(tick() - _dbgT0, phase)) end
 end
 local function dbgErr(phase, err)
-print("[Jianghu] ERROR in " .. phase .. ": " .. tostring(err))
+print(("[Jianghu] ERROR in %s: %s"):format(phase, tostring(err)))
 local ok, info = pcall(function() return debug.getinfo(2, "nSl") end)
 if ok and info then
-print("[Jianghu]   source: " .. tostring(info.source) .. " line " .. tostring(info.currentline))
+print(("[Jianghu]   source: %s line %s"):format(tostring(info.source), tostring(info.currentline)))
 end
 end
 ------------------------------------------------------------------ config
