@@ -1,0 +1,81 @@
+--[[
+  ForageKit Debug Loader
+  ──────────────────────
+  Set debug = true BEFORE running this script.
+  It wraps loadstring with compile-error capture and phase tracking.
+
+  Usage:
+    debug = true
+    loadstring(game:HttpGet("URL_TO_debug_loader.txt"))()
+
+  Or paste this directly into your executor with debug = true set.
+]]
+
+local _t = tick()
+local function log(msg)
+  print(("[Jianghu Debug] %.3fs  %s"):format(tick() - _t, msg))
+end
+
+log("────────── ForageKit Debug Loader ──────────")
+log("Fetching JianghuFull.txt ...")
+
+local ok, src = pcall(function()
+  return game:HttpGet("https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/JianghuFull.txt")
+end)
+
+if not ok or not src then
+  log("HTTP FAILED: " .. tostring(src))
+  return
+end
+
+log("Fetched " .. #src .. " bytes (" .. select(2, src:gsub("\n", "")) .. " lines)")
+
+-- Compile
+log("Compiling via loadstring ...")
+local fn, compileErr = loadstring(src)
+
+if not fn then
+  log("═══════ COMPILE ERROR ═══════")
+  log(compileErr or "(nil)")
+  log("═════════════════════════════")
+  -- Try to pinpoint the line
+  local lineNum = compileErr and compileErr:match(":(%d+):")
+  if lineNum then
+    lineNum = tonumber(lineNum)
+    local lines = src:split("\n")
+    local start = math.max(1, lineNum - 3)
+    local stop = math.min(#lines, lineNum + 3)
+    log("Context around line " .. lineNum .. ":")
+    for i = start, stop do
+      local marker = (i == lineNum) and " >> " or "    "
+      log(marker .. i .. ": " .. lines[i])
+    end
+  end
+  return
+end
+
+log("Compile OK — executing ...")
+
+-- Execute with error wrapping
+local execOk, execErr = pcall(fn)
+
+if not execOk then
+  log("═══════ RUNTIME ERROR ═══════")
+  log(tostring(execErr))
+  log("══════════════════════════════")
+else
+  log("═══════ EXECUTION OK ═══════")
+end
+
+-- Verify ForageKit loaded
+local fk = getgenv and getgenv().ForageKit
+if fk then
+  log("ForageKit loaded successfully ✓")
+  log("API: " .. table.concat({
+    "Destroy", "SetMode", "Start", "Stop", "Scan", "Show"
+  }, ", "))
+else
+  log("WARNING: ForageKit not found in getgenv")
+end
+
+log("────────── Debug Loader Done ──────────")
