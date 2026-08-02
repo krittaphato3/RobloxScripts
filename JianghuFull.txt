@@ -2223,7 +2223,6 @@ end
 if not found and toast then toast("zone not found", "warn") end
 end)
 end
-end
 zoneLabels[z.mult .. z.path] = {check = check, mult = multLbl}
 end
 -- techniques
