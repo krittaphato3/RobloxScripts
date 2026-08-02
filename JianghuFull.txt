@@ -2203,19 +2203,22 @@ tpBtn.MouseButton1Click:Connect(function()
 local found = false
 pcall(function()
 local regions = Workspace:FindFirstChild("ForagingRegions")
-if not regions then return end
+if regions then
 for _, c in ipairs(regions:GetDescendants()) do
-if not (c:IsA("Model") or c:IsA("Folder")) then continue end
+local ok = pcall(function()
+if not (c:IsA("Model") or c:IsA("Folder")) then return end
 local n = c.Name:lower()
-if not (n:find("zone", 1, true) or n:find("band", 1, true)) then continue end
+if not (n:find("zone", 1, true) or n:find("band", 1, true)) then return end
 local attrs = c:GetAttributes()
-if not (attrs and attrs.Multiplier == z.mult) then continue end
+if not (attrs and attrs.Multiplier == z.mult) then return end
 local root = c:FindFirstChild("Root") or c:FindFirstChildWhichIsA("BasePart")
 if root then
 teleportToTarget(root.Position)
 found = true
 if toast then toast("TP to " .. fmtN(z.mult) .. "× zone", "good") end
-break
+end
+end)
+if found then break end
 end
 end
 end)
@@ -2502,10 +2505,11 @@ end))
 -- gate radar animation on visibility
 track(task.spawn(function()
 while alive do
-if not emptyState or not emptyState.Visible then task.wait(1); continue end
--- radar animation would go here if we had the sweep/ring refs
--- for now just yield
+if not emptyState or not emptyState.Visible then task.wait(1)
+else
+-- radar animation placeholder
 task.wait(1)
+end
 end
 end))
 -- auto-resume the saved selection if we were farming when we left
