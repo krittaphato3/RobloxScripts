@@ -2201,11 +2201,11 @@ corner(tpBtn, 4)
 if q then
 tpBtn.MouseButton1Click:Connect(function()
 local found = false
-pcall(function()
 local regions = Workspace:FindFirstChild("ForagingRegions")
 if regions then
 for _, c in ipairs(regions:GetDescendants()) do
-local ok = pcall(function()
+if found then break end
+pcall(function()
 if not (c:IsA("Model") or c:IsA("Folder")) then return end
 local n = c.Name:lower()
 if not (n:find("zone", 1, true) or n:find("band", 1, true)) then return end
@@ -2218,12 +2218,11 @@ found = true
 if toast then toast("TP to " .. fmtN(z.mult) .. "× zone", "good") end
 end
 end)
-if found then break end
 end
 end
-end)
 if not found and toast then toast("zone not found", "warn") end
 end)
+end
 end
 zoneLabels[z.mult .. z.path] = {check = check, mult = multLbl}
 end
