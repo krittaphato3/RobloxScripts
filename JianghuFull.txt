@@ -2089,6 +2089,7 @@ local remote = cultFolder:FindFirstChild("state_updated")
 if not (remote and remote:IsA("RemoteEvent")) then return false end
 cultConn = remote.OnClientEvent:Connect(function(payload)
 if type(payload) ~= "table" then return end
+if _fkDebug and not cultState then print("[Jianghu] first state_updated received!") end
 local realNow = normPath(payload.ActivePath) or normPath(payload.GainPath)
 if realNow and payload[realNow] then cultActive = realNow end
 local active = (realNow and payload[realNow]) and realNow
@@ -2428,7 +2429,8 @@ end
 end -- updateStatsPage
 
 -- install cultivation state listener
-pcall(installCultState)
+local cultOk, cultResult = pcall(installCultState)
+if _fkDebug then print("[Jianghu] installCultState: " .. (cultOk and tostring(cultResult) or "ERROR: " .. tostring(cultResult))) end
 autoBt.bootTime = os.clock()
 tabPages["Stats"] = { contentFrame = statsPage, sidebarFrame = nil }
 statsPage.Visible = true  -- Stats is the default tab
