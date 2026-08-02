@@ -2043,6 +2043,41 @@ return ("%ds"):format(sc)
 end
 local function pct(x) return ("%.1f%%"):format((x or 0) * 100) end
 
+-- ═══ RICH TEXT HELPERS ═══
+local RT = {
+    jade  = "rgb(45,212,168)",
+    gold  = "rgb(212,175,55)",
+    crimson = "rgb(220,38,38)",
+    text  = "rgb(245,245,240)",
+    silver = "rgb(156,163,175)",
+    dim   = "rgb(100,112,128)",
+    cyan  = "rgb(96,200,214)",
+    warm  = "rgb(224,164,88)",
+    barBg = "rgb(42,42,53)",
+}
+local function colRT(c, t) return '<font color="' .. c .. '">' .. tostring(t) .. "</font>" end
+local function bRT(t) return "<b>" .. tostring(t) .. "</b>" end
+local function labelRT(t) return colRT("rgb(100,112,128)", '<font size="9">' .. tostring(t) .. "</font>") end
+local function heroRT(c, t) return colRT(c, '<font size="15">' .. bRT(tostring(t)) .. "</font>") end
+local function heroSmRT(c, t) return colRT(c, '<font size="12">' .. bRT(tostring(t)) .. "</font>") end
+local function barRT(frac, width, fillColor)
+    width = width or 24
+    if frac ~= frac or frac == nil then frac = 0 end
+    frac = math.clamp(frac, 0, 1)
+    local f = math.floor(frac * width + 0.5)
+    return colRT(fillColor or RT.jade, string.rep("\226\150\130", f))
+        .. colRT(RT.barBg, string.rep("\226\150\133", width - f))
+end
+local function pctSlope(x) return ("%.5f%%/s"):format((x or 0) * 100) end
+local function fmtStageHuman(node)
+    if not node then return "?" end
+    local prefix, tailVal = parseStage(node.Stage)
+    local minor = node.Minor or tailVal or 0
+    local major = node.Major or 0
+    local display = prefix or node.Stage or "?"
+    return display .. "  Major " .. major .. " \194\183 " .. "Minor " .. minor
+end
+
 -- chance model (quadratic concave fit)
 local function solve3(m, t)
 local M = {
@@ -2104,6 +2139,62 @@ local a,b = fit.lin[1], fit.lin[2]
 return math.min(1, math.max(0, a+b)), "linear"
 end
 return nil, "none"
+end
+
+local function vertexInfo(fit)
+    if not (fit and fit.quad) then return nil end
+    local a,b,c = fit.quad[1], fit.quad[2], fit.quad[3]
+    if math.abs(c) < 1e-12 then return nil end
+    local rv = -b/(2*c)
+    return { r = rv, ch = math.min(1, math.max(0, a+b*rv+c*rv*rv)), concave = c < 0 }
+end
+local function attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
+    if not rate or rate <= 0 then return nil, "rate0" end
+    if chance and chance >= T then
+        if cost and cur >= cost then return 0, "attempt now" end
+        local t = (cost and cost > 0) and ((cost - cur) / rate) or nil
+        return t, "chance met now; gate = essence"
+    end
+    local function rForTarget(fit, T, curR)
+        if not fit then return nil, nil end
+        local v = vertexInfo(fit)
+        if useQuad(fit) then
+            local a,b,c = fit.quad[1], fit.quad[2], fit.quad[3]
+            if math.abs(c) < 1e-12 then
+                if math.abs(b) < 1e-12 then return nil, v end
+                return (T-a)/b, v
+            end
+            local disc = b*b - 4*c*(a - T)
+            if disc < 0 then return nil, v end
+            local sq = math.sqrt(disc)
+            local r1 = (-b - sq)/(2*c)
+            local r2 = (-b + sq)/(2*c)
+            local cand = {}
+            if r1 >= curR - 1e-9 then table.insert(cand, r1) end
+            if r2 >= curR - 1e-9 then table.insert(cand, r2) end
+            if #cand == 0 then return nil, v end
+            table.sort(cand)
+            return cand[1], v
+        elseif fit.lin then
+            local a,b = fit.lin[1], fit.lin[2]
+            if math.abs(b) < 1e-12 then return nil, v end
+            return (T-a)/b, v
+        end
+        return nil, v
+    end
+    local rT, v = rForTarget(fit, T, curR)
+    if not rT then
+        if v and v.concave and v.r and v.r >= curR - 1e-9 and v.ch and v.ch < T then
+            return nil, string.format("peaks %.0f%%", v.ch*100)
+        end
+        return nil, "unreachable"
+    end
+    local rUse = math.max(rT, 1)
+    local need = rUse*cost - cur
+    if need < 0 then need = 0 end
+    local t = need / rate
+    local tag = (rT <= 1.0001) and "ok@cost" or "overfill"
+    return t, tag
 end
 
 -- subscribe to Cultivation.state_updated
@@ -2191,253 +2282,297 @@ if p == "Qi" then return majQi >= req end
 return majBody >= req
 end
 
--- ─── BUILD STATS SECTIONS ───
+-- ─── BUILD STATS SECTIONS (RichText) ───
 dbg("stats page build")
--- cultivation status
-statsSection("Cultivation Status")
-local cultStatusLabel = statsRow("Status", "waiting for data", J.silver)
-local cultPathLabel = statsRow("Active Path", "—", J.jade)
-local cultStageLabel = statsRow("Stage", "—", J.text)
-local cultEssenceBar, cultEssencePct = statsBar(0, J.jade)
-local cultRateLabel = statsRow("Rate", "—", J.text)
-local cultTimeLabel = statsRow("Time to Cost", "—", J.jade)
-statsSection("Breakthrough Chance", J.gold)
-local cultChanceLabel = statsRow("Current Chance", "—", J.gold)
-local cultFitLabel = statsRow("Model", "—", J.silver)
-local cultChanceBar, cultChancePct = statsBar(0, J.gold)
--- auto-breakthrough
-statsSection("Auto-Breakthrough", J.crimson)
-local btEnableBtn, btBodyBtn  -- declare before statsWideBtn so closures capture the upvalue
+
+local cultRichLabel = label({Text = "", Font = FONT_MONO, TextSize = 12,
+    TextColor3 = J.text, TextWrapped = true, RichText = true,
+    AutomaticSize = Enum.AutomaticSize.Y,
+    Size = UDim2.new(1,0,0,0), TextXAlignment = Enum.TextXAlignment.Left,
+    TextYAlignment = Enum.TextYAlignment.Top}, statsScroll)
+
+-- auto-breakthrough buttons (keep statsWideBtn)
+local btEnableBtn, btBodyBtn
 btEnableBtn = statsWideBtn("AUTO-BT: OFF", "secondary", function()
-autoBt.enabled = not autoBt.enabled
-btEnableBtn.Text = autoBt.enabled and "AUTO-BT: ON" or "AUTO-BT: OFF"
-btEnableBtn.BackgroundColor3 = autoBt.enabled and J.jade or J.charcoal
-if autoBt.enabled then grad(btEnableBtn, J.jade, J.jadeDk, 90) end
+    autoBt.enabled = not autoBt.enabled
+    btEnableBtn.Text = autoBt.enabled and "AUTO-BT: ON" or "AUTO-BT: OFF"
+    btEnableBtn.BackgroundColor3 = autoBt.enabled and J.jade or J.charcoal
+    if autoBt.enabled then grad(btEnableBtn, J.jade, J.jadeDk, 90) end
 end)
 btBodyBtn = statsWideBtn("Body: OFF (safe)", "secondary", function()
-if autoBt.bodyEnabled then
-autoBt.bodyEnabled = false
-autoBt.bodyConfirmPending = false
-if btBodyBtn then
-btBodyBtn.Text = "Body: OFF (safe)"
-btBodyBtn.BackgroundColor3 = J.charcoal
-btBodyBtn.TextColor3 = J.text
-end
-else
-if not autoBt.bodyConfirmPending then
-autoBt.bodyConfirmPending = true
-if btBodyBtn then
-btBodyBtn.Text = "SURE? BODY CAN DIE"
-btBodyBtn.BackgroundColor3 = J.crimson
-btBodyBtn.TextColor3 = J.ink
-end
-task.spawn(function()
-task.wait(3)
-if autoBt.bodyConfirmPending then
-autoBt.bodyConfirmPending = false
-if btBodyBtn then
-btBodyBtn.Text = "Body: OFF (safe)"
-btBodyBtn.BackgroundColor3 = J.charcoal
-btBodyBtn.TextColor3 = J.text
-end
-end
+    if autoBt.bodyEnabled then
+        autoBt.bodyEnabled = false
+        autoBt.bodyConfirmPending = false
+        if btBodyBtn then
+            btBodyBtn.Text = "Body: OFF (safe)"
+            btBodyBtn.BackgroundColor3 = J.charcoal
+            btBodyBtn.TextColor3 = J.text
+        end
+    else
+        if not autoBt.bodyConfirmPending then
+            autoBt.bodyConfirmPending = true
+            if btBodyBtn then
+                btBodyBtn.Text = "SURE? BODY CAN DIE"
+                btBodyBtn.BackgroundColor3 = J.crimson
+                btBodyBtn.TextColor3 = J.ink
+            end
+            task.spawn(function()
+                task.wait(3)
+                if autoBt.bodyConfirmPending then
+                    autoBt.bodyConfirmPending = false
+                    if btBodyBtn then
+                        btBodyBtn.Text = "Body: OFF (safe)"
+                        btBodyBtn.BackgroundColor3 = J.charcoal
+                        btBodyBtn.TextColor3 = J.text
+                    end
+                end
+            end)
+        else
+            autoBt.bodyConfirmPending = false
+            autoBt.bodyEnabled = true
+            if btBodyBtn then
+                btBodyBtn.Text = "Body: ON (lethal!)"
+                btBodyBtn.BackgroundColor3 = J.crimson
+                btBodyBtn.TextColor3 = J.ink
+            end
+        end
+    end
 end)
-else
-autoBt.bodyConfirmPending = false
-autoBt.bodyEnabled = true
-if btBodyBtn then
-btBodyBtn.Text = "Body: ON (lethal!)"
-btBodyBtn.BackgroundColor3 = J.crimson
-btBodyBtn.TextColor3 = J.ink
-end
-end
-end
-end)
-local btFeedbackLabel = statsRow("Feedback", "—", J.silver)
--- profile
-statsSection("Profile")
-local profRootLabel = statsRow("Root", "—", J.text)
-local profConstLabel = statsRow("Constitution", "—", J.text)
-local profLuckLabel = statsRow("Luck", "—", J.text)
-local profComprLabel = statsRow("Comprehension", "—", J.text)
-local profSSLabel = statsRow("Spirit Stones", "—", J.gold)
-local profForageLabel = statsRow("Foraging Mastery", "—", J.text)
-local profAlchLabel = statsRow("Alchemy Mastery", "—", J.text)
-local profWeaponLabel = statsRow("Weapon Mastery", "—", J.text)
-local profSkillLabel = statsRow("Skill Mastery", "—", J.text)
--- zones
-statsSection("Zone Multipliers", J.gold)
-local zoneLabels = {}
-for _, z in ipairs(ZONES) do
-local tag = (z.path == "All") and "All" or z.path
-local row = mk("Frame", {Size = UDim2.new(1,0,0,26), BackgroundTransparency = 1}, statsScroll)
-local q = qualZone(z.path, z.req)
-local check = label({Text = q and "✓" or "·", TextSize = 12, TextColor3 = q and J.jade or J.disabled,
-Position = UDim2.new(0,0,0,0), Size = UDim2.new(0,20,1,0)}, row)
-local multLbl = label({Text = fmtN(z.mult) .. "×", TextSize = 12, TextColor3 = J.text,
-Position = UDim2.new(0,24,0,0), Size = UDim2.new(0,80,1,0)}, row)
-setWeight(multLbl, Enum.FontWeight.Bold)
-label({Text = "req" .. z.req .. " " .. tag, TextSize = 10, TextColor3 = J.silver,
-Position = UDim2.new(0,110,0,0), Size = UDim2.new(0.4,0,1,0)}, row)
--- TP button
-local tpBtn = mk("TextButton", {Text = "TP", Font = FONT_BODY, TextSize = 9,
-TextColor3 = J.text, BackgroundColor3 = q and J.jade or J.charcoal,
-Size = UDim2.new(0,36,0,22), Position = UDim2.new(1,-40,0.5,-11),
-AutoButtonColor = false, BorderSizePixel = 0, ZIndex = 2}, row)
-corner(tpBtn, 4)
-if q then
-tpBtn.MouseButton1Click:Connect(function()
-local found = false
-local regions = Workspace:FindFirstChild("ForagingRegions")
-if regions then
-for _, c in ipairs(regions:GetDescendants()) do
-if found then break end
-pcall(function()
-if not (c:IsA("Model") or c:IsA("Folder")) then return end
-local n = c.Name:lower()
-if not (n:find("zone", 1, true) or n:find("band", 1, true)) then return end
-local attrs = c:GetAttributes()
-if not (attrs and attrs.Multiplier == z.mult) then return end
-local root = c:FindFirstChild("Root") or c:FindFirstChildWhichIsA("BasePart")
-if root then
-teleportToTarget(root.Position)
-found = true
-if toast then toast("TP to " .. fmtN(z.mult) .. "× zone", "good") end
-end
-end)
-end
-end
-if not found and toast then toast("zone not found", "warn") end
-end)
-end
-zoneLabels[z.mult .. z.path] = {check = check, mult = multLbl}
-end
--- techniques
-statsSection("Techniques")
-local techLabel = statsRow("Active Growth ×", "—", J.jade)
-local techListLabel = label({Text = "—", TextSize = 11, TextColor3 = J.silver,
-Size = UDim2.new(1,0,0,60), TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left}, statsScroll)
+local btFeedbackLabel = statsWideBtn("", "secondary", nil)
+btFeedbackLabel.TextColor3 = J.silver
+btFeedbackLabel.TextSize = 10
 
--- ─── STATS UPDATE FUNCTION ───
+-- ─── STATS UPDATE FUNCTION (RichText) ───
 local statsStartTime = os.clock()
 updateStatsPage = function()
--- cultivation state
-if cultState then
-local active = cultActive or "Qi"
-local idle = (normPath(cultState.ActivePath or cultState.GainPath) == nil)
-local gaining = (cultState.Meditating == true)
-cultStatusLabel.Text = gaining and "MEDITATING" or (idle and "IDLE" or "IDLE")
-cultStatusLabel.TextColor3 = gaining and J.jade or (idle and J.amber or J.silver)
-cultPathLabel.Text = active
-local node = cultState[active]
-if node then
-local prefix, tailVal = parseStage(node.Stage)
-local minor = node.Minor or tailVal or 0
-local major = node.Major or 0
-cultStageLabel.Text = (node.Stage or "?") .. "  Major " .. major .. " · Minor " .. minor
-local cur = node.Current or 0
-local cost = node.BreakthroughCost or 0
-local gap = math.max(0, cost - cur)
-local frac = (cost and cost > 0) and (cur / cost) or 0
-cultEssenceBar.Size = UDim2.new(math.clamp(frac, 0, 1), 0, 1, 0)
-cultEssencePct.Text = ("%.1f%%  (%s / %s)"):format(frac * 100, fmtN(cur), fmtN(cost))
-local rate = cultState[active .. "EffectiveRate"] or cultState[active .. "GrowthRate"] or 0
-cultRateLabel.Text = fmtRate(rate) .. " server  " .. fmtRate(cultObs.rate) .. " obs"
-local tCost = (rate and rate > 0 and gap > 0) and (gap / rate) or (gap <= 0 and 0 or nil)
-cultTimeLabel.Text = fmtT(tCost)
-local chance = node.BreakthroughChance or 0
-cultChanceLabel.Text = pct(chance)
-cultChanceBar.Size = UDim2.new(math.clamp(chance, 0, 1), 0, 1, 0)
-local fit = fitChance()
-local chCost, modelName = chanceAtCost(fit)
-cultFitLabel.Text = (modelName or "none") .. "  n=" .. (fit and fit.n or 0)
--- auto-bt
-if autoBt.enabled and cultState then
-local realActive = normPath(cultState.ActivePath or cultState.GainPath)
-if realActive then
-local n = cultState[realActive]
-if n and n.CanBreakthrough then
-local cur2 = n.Current or 0
-local cost2 = n.BreakthroughCost or 0
-local ch2 = n.BreakthroughChance or 0
-local allowed = (realActive == "Qi") or (realActive == "Body" and autoBt.bodyEnabled)
-if allowed and cost2 > 0 and cur2 >= cost2 and ch2 >= (autoBt.minChance / 100)
-and (tick() - autoBt.bootTime) >= autoBt.bootGrace
-and (tick() - autoBt.lastFire) >= autoBt.cooldown then
-doBreakthrough(realActive)
-end
-end
-end
-end
-if autoBt.awaiting and cultState and autoBt.awaitPath then
-local n = cultState[autoBt.awaitPath]
-if n and n.Stage and n.Stage ~= autoBt.awaitStage then
-autoBt.feedback = "✓ REALM UP → " .. tostring(n.Stage)
-autoBt.flashUntil = tick() + 2.0
-autoBt.awaiting = false
-elseif (tick() - autoBt.lastFire) > 8 then
-autoBt.feedback = "roll resolved · essence reset · re-grinding"
-autoBt.awaiting = false
-end
-end
-if btFeedbackLabel then
-btFeedbackLabel.Text = autoBt.feedback
-btFeedbackLabel.TextColor3 = (tick() < autoBt.flashUntil) and J.jade or J.silver
-end
--- profile
-pollCultProfile()
-profRootLabel.Text = tostring(cultProfile.root or "—")
-profConstLabel.Text = tostring(cultProfile.const or "—")
-profLuckLabel.Text = tostring(cultProfile.luck or "—")
-profComprLabel.Text = tostring(cultProfile.compr or "—")
-profSSLabel.Text = tostring(cultProfile.ss or "—")
-profForageLabel.Text = tostring(cultProfile.mf or "—")
-profAlchLabel.Text = tostring(cultProfile.ma or "—")
-profWeaponLabel.Text = tostring(cultProfile.mw or "—")
-profSkillLabel.Text = tostring(cultProfile.ms or "—")
--- zones
-local zq = cultState.ZoneMultiplierQi or 0
-local zb = cultState.ZoneMultiplierBody or 0
-for _, z in ipairs(ZONES) do
-local key = z.mult .. z.path
-if zoneLabels[key] then
-local q = qualZone(z.path, z.req)
-zoneLabels[key].check.Text = q and "✓" or "·"
-zoneLabels[key].check.TextColor3 = q and J.jade or J.disabled
-end
-end
--- techniques
-local techs = cultState.Techniques
-if type(techs) == "table" then
-local keys = {}
-for k in pairs(techs) do table.insert(keys, k) end
-table.sort(keys, function(a,b) return tostring(a) < tostring(b) end)
-local lines = {}
-for _, k in ipairs(keys) do
-local t = techs[k]
-if type(t) == "table" then
-local flags = (t.affects_growth and "G" or "") .. (t.affects_recovery and "R" or "")
-local isActive = (t.path == cultActive and t.affects_growth and t.multiplier == (cultState[cultActive] and cultState[cultActive].TechniqueMultiplier))
-local mark = isActive and " ◄" or ""
-lines[#lines+1] = "• " .. tostring(t.name or "?") .. "  ×" .. tostring(t.multiplier or "?") .. "  [" .. flags .. "]" .. mark
-end
-end
-techListLabel.Text = table.concat(lines, "\n")
-techLabel.Text = "×" .. tostring(cultState[cultActive] and cultState[cultActive].TechniqueMultiplier or "?")
-else
-techListLabel.Text = "—"
-end
-else
-cultStatusLabel.Text = "waiting for Cultivation.state_updated..."
-cultPathLabel.Text = "—"
-cultStageLabel.Text = "—"
-end
--- harvester stats (keep existing)
--- runtime
-local rt = math.floor(os.clock() - statsStartTime)
-local mins = math.floor(rt / 60)
-local secs = rt % 60
-end
+    if not cultRichLabel then return end
+
+    if not cultState then
+        cultRichLabel.Text = colRT(RT.dim, "waiting for first Cultivation.state_updated\u2026\n(start meditating or wait ~1s)")
+        pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
+        return
+    end
+
+    local active = cultActive or "Qi"
+    local idle   = (normPath(cultState.ActivePath or cultState.GainPath) == nil)
+    local gaining = (cultState.Meditating == true)
+    local node   = cultState[active]
+    if not node then
+        cultRichLabel.Text = colRT(RT.dim, "waiting for cultivation data\u2026")
+        pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
+        return
+    end
+
+    local accent  = (active == "Qi") and RT.cyan or RT.warm
+    local accent3 = (active == "Qi") and Color3.fromRGB(96,200,214) or Color3.fromRGB(224,164,88)
+
+    local L = {}
+
+    -- PATH HEADER
+    local stateWord
+    if gaining then
+        stateWord = colRT(RT.jade, "MEDITATING")
+    elseif idle then
+        stateWord = colRT(RT.warm, "IDLE") .. colRT(RT.dim, " \u00b7 not cultivating")
+    else
+        stateWord = colRT(RT.warm, "IDLE")
+    end
+    table.insert(L, heroSmRT(accent, active:upper() .. " PATH") .. "   " .. stateWord
+        .. "   " .. colRT(RT.dim, "tick=" .. tostring(cultState.TickMode or "?")))
+
+    -- STAGE
+    local prefix, tailVal = parseStage(node.Stage)
+    local minor = node.Minor or tailVal or 0
+    local major = node.Major or 0
+    local nextLabel
+    if minor < 10 and prefix and prefix ~= "" then
+        nextLabel = colRT(RT.dim, prefix .. " " .. (ROMAN[minor+1] or tostring(minor+1)))
+    elseif minor >= 10 then
+        nextLabel = colRT(RT.warm, "Major " .. (major+1) .. " \u00b7 Minor 1  (new tier name not broadcast)")
+    else
+        nextLabel = colRT(RT.dim, "Major " .. major .. " \u00b7 Minor " .. (minor+1))
+    end
+    table.insert(L, labelRT("REALM") .. "  " .. heroRT(accent, node.Stage or "?")
+        .. "   " .. colRT(RT.dim, "M" .. major .. "\u00b7m" .. minor) .. "  \u2192  " .. nextLabel)
+
+    -- ESSENCE
+    local cur   = node.Current or 0
+    local cost  = node.BreakthroughCost or 0
+    local gap   = math.max(0, cost - cur)
+    local frac  = (cost and cost > 0) and (cur / cost) or 0
+    table.insert(L, labelRT("ESSENCE") .. " " .. colRT(accent, fmtN(cur))
+        .. colRT(RT.dim, "   cost ") .. colRT(RT.text, fmtN(cost)))
+    table.insert(L, colRT(accent, barRT(frac)) .. "  " .. heroSmRT(RT.text, string.format("%.1f%%", frac*100))
+        .. "   " .. colRT(RT.dim, "gap ") .. colRT(RT.text, fmtN(gap)))
+
+    -- RATE
+    local rate = cultState[active .. "EffectiveRate"] or cultState[active .. "GrowthRate"] or 0
+    table.insert(L, labelRT("RATE") .. " " .. colRT(RT.text, fmtRate(rate)) .. colRT(RT.dim, " server")
+        .. "   " .. colRT(RT.dim, fmtRate(cultObs.rate) .. " obs"))
+
+    -- TIME TO COST
+    local tCost = (rate and rate > 0 and gap > 0) and (gap / rate) or (gap <= 0 and 0 or nil)
+    table.insert(L, labelRT("TIME \u2192 COST") .. "  " .. heroRT(accent, fmtT(tCost)))
+
+    -- CHANCE
+    local chance = node.BreakthroughChance or 0
+    local curR   = (cost and cost > 0) and (cur / cost) or 0
+    local fit    = fitChance()
+    local chCost, modelName = chanceAtCost(fit)
+    local vtx    = vertexInfo(fit)
+
+    table.insert(L, labelRT("CHANCE") .. " now " .. colRT(RT.text, pct(chance))
+        .. "   " .. colRT(RT.dim, "\u0394 " .. pctSlope(cultObs.cslope) .. " obs"))
+    local chCostLine = labelRT("CHANCE @ COST") .. " " .. colRT(RT.jade, pct(chCost))
+        .. colRT(RT.dim, "  (" .. modelName .. " fit, n=" .. (fit and fit.n or 0) .. ")")
+    if vtx and vtx.concave and vtx.ch and vtx.ch < 1 then
+        chCostLine = chCostLine .. colRT(RT.warm, "  peak " .. pct(vtx.ch))
+    end
+    table.insert(L, chCostLine)
+
+    -- ATTEMPT WHEN
+    table.insert(L, labelRT("ATTEMPT WHEN  \u00b7 " .. modelName .. " model"))
+    for _, T in ipairs({0.80, 0.90, 0.95, 0.99}) do
+        local t, tag = attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
+        local rhs
+        if t == nil then
+            rhs = colRT(RT.crimson, "\u2014  ") .. colRT(RT.dim, "(" .. tostring(tag) .. ")")
+        elseif tag == "attempt now" then
+            rhs = colRT(RT.jade, "now") .. colRT(RT.dim, "  (chance & essence both met)")
+        elseif tag == "chance met now; gate = essence" then
+            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met now \u00b7 gate = essence)")
+        elseif tag == "ok@cost" then
+            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met by cost \u00b7 gate = essence)")
+        else
+            rhs = colRT(accent, fmtT(t)) .. colRT(RT.warm, "  (overfill past cost)")
+        end
+        table.insert(L, "   \u2265" .. math.floor(T*100) .. "%  \u2192  " .. rhs)
+    end
+    if modelName == "linear" then
+        table.insert(L, colRT(RT.dim, "   linear slope can't see curve-bend near the top;"))
+        table.insert(L, colRT(RT.dim, "   high-% rows are lower bounds until the fit gains curvature."))
+    else
+        table.insert(L, colRT(RT.dim, "   " .. modelName .. " fit over last " .. (fit and fit.n or 0) .. " ticks;"))
+        table.insert(L, colRT(RT.dim, "   values beyond the observed band are an estimate, not a guarantee."))
+    end
+
+    if node.BreakthroughWarning and node.BreakthroughWarning ~= "" then
+        table.insert(L, colRT(RT.warm, "\u26a0 " .. node.BreakthroughWarning))
+    end
+    local lock = cultState.RealmLocks and cultState.RealmLocks[active]
+    if lock then table.insert(L, colRT(RT.crimson, "REALM LOCKED (" .. active .. ")")) end
+
+    -- AUTO-BT FEEDBACK (live)
+    if autoBt.awaiting and cultState and autoBt.awaitPath then
+        local n = cultState[autoBt.awaitPath]
+        if n and n.Stage and n.Stage ~= autoBt.awaitStage then
+            autoBt.feedback = "\u2713 REALM UP \u2192 " .. tostring(n.Stage)
+            autoBt.flashUntil = tick() + 2.0
+            autoBt.awaiting = false
+        elseif (tick() - autoBt.lastFire) > 8 then
+            autoBt.feedback = "roll resolved \u00b7 essence reset \u00b7 re-grinding"
+            autoBt.awaiting = false
+        end
+    end
+    if btFeedbackLabel then
+        local fbTxt = colRT((tick() < autoBt.flashUntil) and RT.jade or RT.silver, autoBt.feedback or "\u2014")
+        btFeedbackLabel.Text = "FB: " .. fbTxt
+        btFeedbackLabel.RichText = true
+        btFeedbackLabel.TextColor3 = J.text
+    end
+
+    -- TECHNIQUES
+    table.insert(L, "")
+    table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \u00d7" .. tostring(node.TechniqueMultiplier)))
+    local techs = cultState.Techniques
+    if type(techs) == "table" then
+        local keys = {}
+        for k in pairs(techs) do table.insert(keys, k) end
+        table.sort(keys, function(a,b) return tostring(a) < tostring(b) end)
+        for _, k in ipairs(keys) do
+            local t = techs[k]
+            if type(t) == "table" then
+                local flags = (t.affects_growth and "G" or "") .. (t.affects_recovery and "R" or "")
+                local isActive = (t.path == active and t.affects_growth and t.multiplier == node.TechniqueMultiplier)
+                local mark = isActive and colRT(RT.jade, "  \u25c4 equipped") or ""
+                local pcol = (t.path == "Qi") and RT.cyan or RT.warm
+                table.insert(L, "   \u2022 " .. colRT(RT.text, tostring(t.name or "?"))
+                    .. "  " .. colRT(pcol, "\u00d7" .. tostring(t.multiplier or "?"))
+                    .. "  " .. colRT(RT.dim, "[" .. flags .. "]") .. mark)
+            end
+        end
+    end
+
+    -- ZONES
+    local zq = cultState.ZoneMultiplierQi or 0
+    local zb = cultState.ZoneMultiplierBody or 0
+    local hereMult = (active == "Qi") and zq or zb
+    table.insert(L, "")
+    table.insert(L, labelRT("ZONES") .. colRT(RT.dim, "  in band ") .. heroSmRT(accent, fmtN(hereMult) .. "\u00d7")
+        .. colRT(RT.dim, "   Qi " .. fmtN(zq) .. "\u00d7 \u00b7 Body " .. fmtN(zb) .. "\u00d7   [req\u2248Major]"))
+    local function zrow(z)
+        local q = qualZone(z.path, z.req)
+        local here = (z.mult == hereMult and (z.path == active or z.path == "All"))
+        local arrow = here and colRT(accent, bRT("  \u25c4 you")) or ""
+        local tag = (z.path == "All") and colRT(RT.dim, "all") or colRT(accent, z.path:lower())
+        local mt = here and heroSmRT(accent, fmtN(z.mult) .. "\u00d7") or colRT(RT.text, fmtN(z.mult) .. "\u00d7")
+        return "   " .. (q and colRT(RT.jade, "\u2713") or colRT(RT.dim, "\u00b7")) .. " " .. mt
+            .. colRT(RT.dim, "  req" .. z.req .. " ") .. tag .. arrow
+    end
+    for _, z in ipairs(ZONES) do if z.path == "All" then table.insert(L, zrow(z)) end end
+    local actRows = {}
+    for _, z in ipairs(ZONES) do if z.path == active then table.insert(actRows, z) end end
+    table.sort(actRows, function(a,b) return a.mult < b.mult end)
+    for _, z in ipairs(actRows) do table.insert(L, zrow(z)) end
+    local oth = (active == "Qi") and "Body" or "Qi"
+    local oAcc = (oth == "Qi") and RT.cyan or RT.warm
+    local oNode = cultState[oth]
+    local oParts = {}
+    for _, z in ipairs(ZONES) do
+        if z.path == oth then
+            table.insert(oParts, (qualZone(z.path, z.req) and colRT(RT.jade, "\u2713") or colRT(RT.dim, "\u00b7"))
+                .. colRT(oAcc, fmtN(z.mult) .. "\u00d7") .. colRT(RT.dim, "(" .. z.req .. ")"))
+        end
+    end
+    table.insert(L, colRT(RT.dim, "\u25b9 " .. oth:upper()) .. "  "
+        .. colRT(oAcc, oNode and (oNode.Stage or "?") or "?")
+        .. "  " .. colRT(RT.dim, "chance ") .. colRT(RT.text, oNode and pct(oNode.BreakthroughChance) or "\u2014")
+        .. "   " .. table.concat(oParts, "  "))
+
+    -- PROFILE (compact)
+    table.insert(L, "")
+    table.insert(L, labelRT("PROFILE"))
+    table.insert(L, colRT(RT.dim, "Root ") .. colRT(RT.text, tostring(cultProfile.root or "?"))
+        .. colRT(RT.dim, "  Const ") .. colRT(RT.text, tostring(cultProfile.const or "?"))
+        .. colRT(RT.dim, "  Luck ") .. colRT(RT.text, tostring(cultProfile.luck or "?"))
+        .. colRT(RT.dim, "  Compr ") .. colRT(RT.text, tostring(cultProfile.compr or "?")))
+    table.insert(L, colRT(RT.dim, "Mastery  Forage ") .. colRT(RT.text, tostring(cultProfile.mf or "?"))
+        .. colRT(RT.dim, "  Alch ") .. colRT(RT.text, tostring(cultProfile.ma or "?"))
+        .. colRT(RT.dim, "  Weapon ") .. colRT(RT.text, tostring(cultProfile.mw or "?"))
+        .. colRT(RT.dim, "  Skill ") .. colRT(RT.text, tostring(cultProfile.ms or "?")))
+    table.insert(L, colRT(RT.dim, "SpiritStones ") .. colRT(RT.text, tostring(cultProfile.ss or "?")))
+
+    cultRichLabel.Text = table.concat(L, "\n")
+    pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
+
+    -- AUTO-BT ENGINE
+    if autoBt.enabled and cultState then
+        local realActive = normPath(cultState.ActivePath or cultState.GainPath)
+        if realActive then
+            local n = cultState[realActive]
+            if n and n.CanBreakthrough then
+                local cur2 = n.Current or 0
+                local cost2 = n.BreakthroughCost or 0
+                local ch2 = n.BreakthroughChance or 0
+                local allowed = (realActive == "Qi") or (realActive == "Body" and autoBt.bodyEnabled)
+                if allowed and cost2 > 0 and cur2 >= cost2 and ch2 >= (autoBt.minChance / 100)
+                    and (tick() - autoBt.bootTime) >= autoBt.bootGrace
+                    and (tick() - autoBt.lastFire) >= autoBt.cooldown then
+                    doBreakthrough(realActive)
+                end
+            end
+        end
+    end
 end -- updateStatsPage
 
 -- install cultivation state listener (now called inside buildWindow)
