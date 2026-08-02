@@ -1,5 +1,5 @@
 --[[
-ForageKit v5.13  --  "The Jianghu Menu"  (Pastebin drop-in)
+ForageKit v5.13  --  "The Jianghu Menu"  (GitHub-hosted)
 ------------------------------------------------------------------
 v5.13  --  COMPLETE UI REWORK (all v5.12 logic preserved)
 * NEW  "The Jianghu Menu" premium jianghu aesthetic: ink/midnight surfaces,
@@ -22,7 +22,7 @@ v5.13  --  COMPLETE UI REWORK (all v5.12 logic preserved)
        edges, soft shadows, hover/press micro-interactions, sliding
        settings panel over a darkening scrim, scrollable sidebar.
 * KEPT v5.12 teleport-height anchor (feet land on the herb's plane),
-       v5.11 Pastebin rejoin + auto-resume, v5.10 hardening, v5.9 fixes.
+       v5.11 GitHub rejoin + auto-resume, v5.10 hardening, v5.9 fixes.
 Behaviour (unchanged)
 * ATTRIBUTE-based herb detection (HerbId) anywhere under Workspace.
 * Selection by HERB TYPE (farms every live instance + follows respawns).
@@ -94,7 +94,7 @@ WindowSize     = nil,  -- nil = use adaptive from viewport on first boot, then s
 local Binds = { toggle = Enum.KeyCode.J, start = Enum.KeyCode.RightShift, stop = Enum.KeyCode.RightControl }
 local SaveFileName = "ForageKit_Settings.json"
 local VALID_MODES  = { Walk = true, Tween = true, Teleport = true, Adaptive = true }
-local FK_URL       = "https://pastebin.com/raw/D7SS8LD9"
+local FK_URL       = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/JianghuFull.txt"
 ------------------------------------------------------------------ design tokens: palette
 local J = {
 ink       = Color3.fromRGB(10,10,15),      -- #0A0A0F  window base
@@ -1562,7 +1562,7 @@ end
 end)
 -- UPDATE SCRIPT
 sectionHead(scroll, "Update", nil, J.gold)
-local updateBtn = mkButton(scroll, {text = "Update Script from Pastebin", size = UDim2.new(1,0,0,40), kind = "secondary", textSize = 12, radius = 6,
+local updateBtn = mkButton(scroll, {text = "Update Script from GitHub", size = UDim2.new(1,0,0,40), kind = "secondary", textSize = 12, radius = 6,
 onClick = function()
 if toast then toast("fetching latest version...", "info") end
 task.spawn(function()
@@ -2469,7 +2469,7 @@ saveSettings()  -- persist window size
 end
 end)
 end
------------------------------------------------------------------- same-game rejoin auto-execute (premium Pastebin pattern)
+------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
 local function armRejoin()
 local placeId = game.PlaceId
 local boot = string.format([==[
