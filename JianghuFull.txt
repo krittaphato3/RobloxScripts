@@ -1868,6 +1868,7 @@ local autoBt = {
 	awaiting = false, awaitPath = nil, awaitStage = nil,
 	feedback = "—", flashUntil = 0, bodyConfirmPending = false,
 }
+local updateStatsPage = nil  -- forward declaration, assigned inside buildWindow
 -- ─── AUTO-BREAKTHROUGH ENGINE (IIFE body level — accessible everywhere) ───
 local function doBreakthrough(path)
 local folder = Replicated:FindFirstChild("Network")
@@ -2320,7 +2321,7 @@ Size = UDim2.new(1,0,0,60), TextWrapped = true, TextXAlignment = Enum.TextXAlign
 
 -- ─── STATS UPDATE FUNCTION ───
 local statsStartTime = os.clock()
-local function updateStatsPage()
+updateStatsPage = function()
 -- cultivation state
 if cultState then
 local active = cultActive or "Qi"
