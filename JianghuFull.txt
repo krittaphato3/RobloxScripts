@@ -1932,55 +1932,148 @@ harvestContent = buildMain(content.frame)
 -- register Harvesting tab
 tabPages["Harvesting"] = { contentFrame = harvestContent, sidebarFrame = harvestSidebar }
 -- build Stats page (first tab, default) — full cultivation dashboard
+-- ════════════════════════════════════════════════════════════════════════
+-- STATS TAB — premium "Cultivation Dashboard" scaffold
+-- ambient glows · status dot · accent line · safe strip · smart auto-bt pill · scroll
+-- ════════════════════════════════════════════════════════════════════════
+local QI_GLOW   = Color3.fromRGB(96,200,214)   -- Qi  active path ambient (matches RT.cyan)
+local BODY_GLOW = Color3.fromRGB(224,164,88)   -- Body active path ambient (matches RT.warm / J.amber)
 local statsPage = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 4}, content.frame)
-local statsScroll = mk("ScrollingFrame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1,
-BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = J.border,
-CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 5}, statsPage)
-mk("UIListLayout", {Padding = UDim.new(0,6), SortOrder = Enum.SortOrder.LayoutOrder}, statsScroll)
-mk("UIPadding", {PaddingTop = UDim.new(0,12), PaddingBottom = UDim.new(0,20), PaddingLeft = UDim.new(0,20), PaddingRight = UDim.new(0,20)}, statsScroll)
 
--- section helper
-local function statsSection(text, accent)
-local h = mk("Frame", {Size = UDim2.new(1,0,0,24), BackgroundTransparency = 1}, statsScroll)
-mk("Frame", {Size = UDim2.new(0,2,0,12), Position = UDim2.new(0,0,0,2), BackgroundColor3 = accent or J.jade, BorderSizePixel = 0}, h)
-local t = label({Text = text:upper(), TextSize = 10, TextColor3 = J.silver,
-Position = UDim2.new(0,10,0,0), Size = UDim2.new(1,-10,0,16), AutomaticSize = Enum.AutomaticSize.X}, h)
-setWeight(t, Enum.FontWeight.SemiBold)
-return h
+-- forward-declared upvalues used by click handlers (must be locals BEFORE assignment
+-- so their own closures can see them as upvalues — same pattern as the old btEnableBtn)
+local statsScroll, statusDot, accentLine, accentShimmer, safeStripLabel
+local autoBtBar, autoBtPill, btFeedbackLabel, bodyPill
+local ambientA, ambientB
+
+-- looping-tween helper (mirrors JianghuStats twLoop: reversed, -1 repeat)
+local function twLoop(obj, props, t, style)
+    if not obj then return nil end
+    local info = TweenInfo.new(t or 1, style or Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+    local tween = TweenSvc:Create(obj, info, props)
+    pcall(function() tween:Play() end)
+    return tween
 end
-local function statsRow(text, valText, valColor)
-local row = mk("Frame", {Size = UDim2.new(1,0,0,28), BackgroundTransparency = 1}, statsScroll)
-label({Text = text, TextSize = 12, TextColor3 = J.silver,
-Position = UDim2.new(0,0,0,0), Size = UDim2.new(0.5,0,1,0)}, row)
-local v = label({Text = valText or "—", TextSize = 13, TextColor3 = valColor or J.text,
-Position = UDim2.new(0.5,0,0,0), Size = UDim2.new(0.5,0,1,0),
-TextXAlignment = Enum.TextXAlignment.Right}, row)
-setWeight(v, Enum.FontWeight.Bold)
-return v
+
+-- ambient accent glows behind everything (clipped to statsPage)
+do
+    local clip = mk("Frame", {Size = UDim2.new(1,0,1,0), Position = UDim2.new(0,0,0,0),
+        BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 1}, statsPage)
+    local function softGlow(pos, size)
+        local g = mk("Frame", {Size = UDim2.new(0,size,0,size), Position = pos,
+            BackgroundColor3 = QI_GLOW, BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 1}, clip)
+        corner(g, size)  -- fully round
+        mk("UIGradient", {
+            Transparency = NumberSequence.new({
+                NumberSequenceKeypoint.new(0, 0.35),
+                NumberSequenceKeypoint.new(1, 1),
+            }),
+            Color = ColorSequence.new(QI_GLOW, QI_GLOW),
+        }, g)
+        return g
+    end
+    ambientA = softGlow(UDim2.new(0,-70,0,-40), 210)
+    ambientB = softGlow(UDim2.new(1,-120,1,-80), 170)
+    twLoop(ambientA, {Position = UDim2.new(0,30,0,10)}, 7)
+    twLoop(ambientB, {Position = UDim2.new(1,-180,1,-150)}, 9)
 end
-local function statsBar(frac, accent)
-frac = math.clamp(frac or 0, 0, 1)
-local row = mk("Frame", {Size = UDim2.new(1,0,0,18), BackgroundTransparency = 1}, statsScroll)
-local bg = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundColor3 = J.charcoal, BorderSizePixel = 0}, row)
-corner(bg, 4)
-local fill = mk("Frame", {Size = UDim2.new(frac,0,1,0), BackgroundColor3 = accent or J.jade, BorderSizePixel = 0}, bg)
-corner(fill, 4)
-local pctLabel = label({Text = ("%.1f%%"):format(frac * 100), TextSize = 10, TextColor3 = J.text,
-Position = UDim2.new(0,8,0,0), Size = UDim2.new(1,-16,1,0), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 2}, fill)
-return fill, pctLabel
+
+-- header strip (40px, ink-dark)
+local header = mk("Frame", {Size = UDim2.new(1,0,0,40), Position = UDim2.new(0,0,0,0),
+    BackgroundColor3 = J.ink, BorderSizePixel = 0, ZIndex = 3}, statsPage)
+statusDot = mk("Frame", {Size = UDim2.new(0,9,0,9), Position = UDim2.new(0,12,0.5,-4),
+    BackgroundColor3 = J.disabled, BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 4}, header)
+corner(statusDot, 9)
+twLoop(statusDot, {BackgroundTransparency = 0.5}, 1.1)  -- 0 → 0.5 → 0 pulse
+do
+    local hdrTitle = mk("TextLabel", {Size = UDim2.new(1,-150,1,0), Position = UDim2.new(0,28,0,0),
+        BackgroundTransparency = 1, Text = "CULTIVATION DASHBOARD",
+        TextColor3 = J.text, TextSize = 13, Font = FONT_MONO,
+        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4}, header)
+    setWeight(hdrTitle, Enum.FontWeight.SemiBold)
+    mk("TextLabel", {Size = UDim2.new(0,40,1,0), Position = UDim2.new(1,-150,0,0),
+        BackgroundTransparency = 1, Text = "ENI", TextColor3 = J.amber, TextSize = 10, Font = FONT_MONO,
+        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4}, header)
 end
-local function statsWideBtn(text, kind, onClick)
-local b = mk("TextButton", {Text = text, Font = FONT_BODY, TextSize = 11,
-TextColor3 = kind == "primary" and J.ink or (kind == "danger" and J.text or J.text),
-BackgroundColor3 = kind == "primary" and J.jade or (kind == "danger" and J.crimson or J.charcoal),
-Size = UDim2.new(1,0,0,34), AutoButtonColor = false, BorderSizePixel = 0}, statsScroll)
-setWeight(b, Enum.FontWeight.SemiBold); corner(b, 6)
-local st = stroke(b, kind == "primary" and J.jadeDk or (kind == "danger" and J.crimsonDk or J.border), 1, 0.3)
-if kind == "primary" then grad(b, J.jade, J.jadeDk, 90) end
-b.MouseEnter:Connect(function() TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = kind == "primary" and J.jadeGlow or (kind == "danger" and Color3.fromRGB(240,50,50) or J.raised)}):Play() end)
-b.MouseLeave:Connect(function() TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = kind == "primary" and J.jade or (kind == "danger" and J.crimson or J.charcoal)}):Play() end)
-if onClick then b.MouseButton1Click:Connect(onClick) end
-return b
+
+-- accent line (2px) at header bottom — Qi jade / Body amber + gliding white shimmer
+accentLine = mk("Frame", {Size = UDim2.new(1,0,0,2), Position = UDim2.new(0,0,1,-2),
+    BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, header)
+accentShimmer = mk("Frame", {Size = UDim2.new(0.3,0,1,0), Position = UDim2.new(0,0,0,0),
+    BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.55,
+    BorderSizePixel = 0, ZIndex = 5}, accentLine)
+corner(accentShimmer, 4)
+twLoop(accentShimmer, {Position = UDim2.new(0.7,0,0,0)}, 2.6)
+
+-- safe strip — single-line truth about hook safety
+safeStripLabel = mk("TextLabel", {Size = UDim2.new(1,-24,0,18), Position = UDim2.new(0,12,0,42),
+    BackgroundTransparency = 1, Text = "SAFE · 0 fires · 0 hooks · reads state_updated only",
+    TextColor3 = J.jade, TextSize = 10, Font = FONT_MONO,
+    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3}, statsPage)
+
+-- auto-bt control bar (smart pill + slim feedback + body toggle, side by side)
+autoBtBar = mk("Frame", {Size = UDim2.new(1,-16,0,30), Position = UDim2.new(0,8,0,62),
+    BackgroundColor3 = Color3.fromRGB(20,23,31), BorderSizePixel = 0, ZIndex = 3}, statsPage)
+corner(autoBtBar, 8)
+stroke(autoBtBar, J.border, 1, 0.5)
+autoBtPill = mk("TextButton", {
+    Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)", TextColor3 = Color3.fromRGB(150,162,178), TextSize = 11,
+    Font = FONT_BODY, AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(46,51,66),
+    BorderSizePixel = 0, Size = UDim2.new(0.62,-6,1,-6), Position = UDim2.new(0,3,0,3),
+    TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
+}, autoBtBar)
+corner(autoBtPill, 6)
+do
+    local padP = mk("UIPadding", {}, autoBtPill)
+    padP.PaddingLeft = UDim.new(0,8)
+end
+-- hover tint on the main pill
+autoBtPill.MouseEnter:Connect(function()
+    TweenSvc:Create(autoBtPill, TweenInfo.new(0.12), {BackgroundColor3 = autoBt.enabled
+        and Color3.fromRGB(70,180,110) or Color3.fromRGB(60,67,84)}):Play()
+end)
+autoBtPill.MouseLeave:Connect(function()
+    TweenSvc:Create(autoBtPill, TweenInfo.new(0.2), {BackgroundColor3 = autoBt.enabled
+        and (tick() < autoBt.flashUntil and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64))
+        or Color3.fromRGB(46,51,66)}):Play()
+end)
+
+bodyPill = mk("TextButton", {
+    Text = "Body: OFF (safe)", TextColor3 = J.text, TextSize = 10, Font = FONT_BODY,
+    AutoButtonColor = false, BackgroundColor3 = J.charcoal, BorderSizePixel = 0,
+    Size = UDim2.new(0,88,1,-6), Position = UDim2.new(0.62,3,0,3),
+    TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
+}, autoBtBar)
+corner(bodyPill, 6)
+bodyPill.MouseEnter:Connect(function()
+    TweenSvc:Create(bodyPill, TweenInfo.new(0.12), {BackgroundColor3 = J.raised}):Play()
+end)
+bodyPill.MouseLeave:Connect(function()
+    TweenSvc:Create(bodyPill, TweenInfo.new(0.2), {BackgroundColor3 =
+        (autoBt.bodyEnabled or autoBt.bodyConfirmPending) and J.crimson or J.charcoal}):Play()
+end)
+
+btFeedbackLabel = mk("TextLabel", {
+    Text = "—", TextColor3 = J.silver, TextSize = 10, Font = FONT_MONO,
+    BackgroundTransparency = 1, BorderSizePixel = 0,
+    Size = UDim2.new(0.38,-104,1,0), Position = UDim2.new(0.62,94,0,0),
+    TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
+}, autoBtBar)
+do
+    local padF = mk("UIPadding", {}, btFeedbackLabel)
+    padF.PaddingRight = UDim.new(0,8)
+end
+
+-- scroll container — watermarked charcoal surface (not fully transparent)
+statsScroll = mk("ScrollingFrame", {Size = UDim2.new(1,-16,1,-100), Position = UDim2.new(0,8,0,98),
+    BackgroundColor3 = J.charcoal, BackgroundTransparency = 0, BorderSizePixel = 0,
+    ScrollBarThickness = 4, ScrollBarImageColor3 = J.border,
+    CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3}, statsPage)
+corner(statsScroll, 9)
+do
+    local padS = mk("UIPadding", {}, statsScroll)
+    padS.PaddingLeft = UDim.new(0,10); padS.PaddingRight = UDim.new(0,10)
+    padS.PaddingTop = UDim.new(0,10);  padS.PaddingBottom = UDim.new(0,10)
 end
 
 -- ─── CULTIVATION STATE READING ───
@@ -2285,62 +2378,70 @@ end
 -- ─── BUILD STATS SECTIONS (RichText) ───
 dbg("stats page build")
 
+-- rich label lives inside the new scroll (LineHeight 1.18 for premium density)
 local cultRichLabel = label({Text = "", Font = FONT_MONO, TextSize = 12,
     TextColor3 = J.text, TextWrapped = true, RichText = true,
-    AutomaticSize = Enum.AutomaticSize.Y,
+    AutomaticSize = Enum.AutomaticSize.Y, LineHeight = 1.18,
     Size = UDim2.new(1,0,0,0), TextXAlignment = Enum.TextXAlignment.Left,
-    TextYAlignment = Enum.TextYAlignment.Top}, statsScroll)
+    TextYAlignment = Enum.TextXAlignment.Top}, statsScroll)
 
--- auto-breakthrough buttons (keep statsWideBtn)
-local btEnableBtn, btBodyBtn
-btEnableBtn = statsWideBtn("AUTO-BT: OFF", "secondary", function()
+-- ─── AUTO-BT INTERACTIONS (wire pill + body toggle; no statsWideBtn) ───
+-- autoBtPill click = toggle autoBt.enabled (reuses old btEnableBtn onClick logic)
+autoBtPill.MouseButton1Click:Connect(function()
     autoBt.enabled = not autoBt.enabled
-    btEnableBtn.Text = autoBt.enabled and "AUTO-BT: ON" or "AUTO-BT: OFF"
-    btEnableBtn.BackgroundColor3 = autoBt.enabled and J.jade or J.charcoal
-    if autoBt.enabled then grad(btEnableBtn, J.jade, J.jadeDk, 90) end
+    if autoBt.enabled then
+        autoBtPill.Text = "AUTO-BT  ON   Qi≥100%"
+        autoBtPill.TextColor3 = Color3.fromRGB(225,255,235)
+        autoBtPill.BackgroundColor3 = (tick() < autoBt.flashUntil)
+            and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64)
+    else
+        autoBtPill.Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)"
+        autoBtPill.TextColor3 = Color3.fromRGB(150,162,178)
+        autoBtPill.BackgroundColor3 = Color3.fromRGB(46,51,66)
+    end
 end)
-btBodyBtn = statsWideBtn("Body: OFF (safe)", "secondary", function()
+
+-- bodyPill click = two-step body confirm (reuses old btBodyBtn onClick logic)
+bodyPill.MouseButton1Click:Connect(function()
     if autoBt.bodyEnabled then
         autoBt.bodyEnabled = false
         autoBt.bodyConfirmPending = false
-        if btBodyBtn then
-            btBodyBtn.Text = "Body: OFF (safe)"
-            btBodyBtn.BackgroundColor3 = J.charcoal
-            btBodyBtn.TextColor3 = J.text
+        if bodyPill then
+            bodyPill.Text = "Body: OFF (safe)"
+            bodyPill.BackgroundColor3 = J.charcoal
+            bodyPill.TextColor3 = J.text
         end
     else
         if not autoBt.bodyConfirmPending then
             autoBt.bodyConfirmPending = true
-            if btBodyBtn then
-                btBodyBtn.Text = "SURE? BODY CAN DIE"
-                btBodyBtn.BackgroundColor3 = J.crimson
-                btBodyBtn.TextColor3 = J.ink
+            if bodyPill then
+                bodyPill.Text = "SURE? BODY CAN DIE"
+                bodyPill.BackgroundColor3 = J.crimson
+                bodyPill.TextColor3 = J.ink
             end
             task.spawn(function()
                 task.wait(3)
                 if autoBt.bodyConfirmPending then
                     autoBt.bodyConfirmPending = false
-                    if btBodyBtn then
-                        btBodyBtn.Text = "Body: OFF (safe)"
-                        btBodyBtn.BackgroundColor3 = J.charcoal
-                        btBodyBtn.TextColor3 = J.text
+                    if bodyPill then
+                        bodyPill.Text = "Body: OFF (safe)"
+                        bodyPill.BackgroundColor3 = J.charcoal
+                        bodyPill.TextColor3 = J.text
                     end
                 end
             end)
         else
             autoBt.bodyConfirmPending = false
             autoBt.bodyEnabled = true
-            if btBodyBtn then
-                btBodyBtn.Text = "Body: ON (lethal!)"
-                btBodyBtn.BackgroundColor3 = J.crimson
-                btBodyBtn.TextColor3 = J.ink
+            if bodyPill then
+                bodyPill.Text = "Body: ON (lethal!)"
+                bodyPill.BackgroundColor3 = J.crimson
+                bodyPill.TextColor3 = J.ink
             end
         end
     end
 end)
-local btFeedbackLabel = statsWideBtn("", "secondary", nil)
-btFeedbackLabel.TextColor3 = J.silver
-btFeedbackLabel.TextSize = 10
+
 
 -- ─── STATS UPDATE FUNCTION (RichText) ───
 local statsStartTime = os.clock()
@@ -2365,6 +2466,54 @@ updateStatsPage = function()
 
     local accent  = (active == "Qi") and RT.cyan or RT.warm
     local accent3 = (active == "Qi") and Color3.fromRGB(96,200,214) or Color3.fromRGB(224,164,88)
+
+    -- ── dashboard scaffolding live-state update (does not touch RichText content) ──
+    -- status dot: jade when meditating, amber when idle, disabled otherwise
+    local dotColor = gaining and J.jade or (not idle and J.amber or J.disabled)
+    pcall(function() statusDot.BackgroundColor3 = dotColor end)
+    -- accent line + ambient glows follow active path (Qi cyan ↔ Body warm), tweened
+    pcall(function() TweenSvc:Create(accentLine, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = (active == "Qi") and J.jade or J.amber}):Play() end)
+    pcall(function() TweenSvc:Create(ambientA, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundColor3 = accent3}):Play() end)
+    pcall(function() TweenSvc:Create(ambientB, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundColor3 = accent3}):Play() end)
+    -- safe strip truth
+    if autoBt.enabled then
+        local bodyTag = autoBt.bodyEnabled and " · +BODY" or " · Body OFF (safe)"
+        pcall(function() safeStripLabel.Text = "AUTO-BT ON · paced breakthrough (Qi-only" .. bodyTag .. ",  ≥" .. tostring(autoBt.minChance) .. "%) · else 0 hooks" end)
+        pcall(function() safeStripLabel.TextColor3 = J.amber end)
+    else
+        pcall(function() safeStripLabel.Text = "SAFE · 0 fires · 0 hooks · reads state_updated only" end)
+        pcall(function() safeStripLabel.TextColor3 = J.jade end)
+    end
+    -- smart pill: armed/idle text + flash background on realm-up
+    do
+        local flashing = (tick() < autoBt.flashUntil)
+        if autoBt.enabled then
+            local bodySuffix = autoBt.bodyEnabled and "  +BODY" or ""
+            local liveCh = node and node.BreakthroughChance
+            local liveSuffix = (liveCh ~= nil) and ("  · now " .. pct(liveCh)) or ""
+            pcall(function()
+                autoBtPill.Text = "AUTO-BT  ON   " .. active .. "≥100%" .. bodySuffix .. liveSuffix
+                autoBtPill.TextColor3 = Color3.fromRGB(225,255,235)
+                autoBtPill.BackgroundColor3 = flashing and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64)
+            end)
+        else
+            pcall(function()
+                autoBtPill.Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)"
+                autoBtPill.TextColor3 = Color3.fromRGB(150,162,178)
+                autoBtPill.BackgroundColor3 = Color3.fromRGB(46,51,66)
+            end)
+        end
+    end
+    -- body pill label reflects confirm-lethal two-step state
+    if bodyPill then
+        if autoBt.bodyEnabled then
+            pcall(function() bodyPill.Text = "Body: ON (lethal!)"; bodyPill.BackgroundColor3 = J.crimson; bodyPill.TextColor3 = J.ink end)
+        elseif autoBt.bodyConfirmPending then
+            pcall(function() bodyPill.Text = "SURE? BODY CAN DIE"; bodyPill.BackgroundColor3 = J.crimson; bodyPill.TextColor3 = J.ink end)
+        else
+            pcall(function() bodyPill.Text = "Body: OFF (safe)"; bodyPill.BackgroundColor3 = J.charcoal; bodyPill.TextColor3 = J.text end)
+        end
+    end
 
     local L = {}
 
@@ -2475,10 +2624,11 @@ updateStatsPage = function()
         end
     end
     if btFeedbackLabel then
-        local fbTxt = colRT((tick() < autoBt.flashUntil) and RT.jade or RT.silver, autoBt.feedback or "\u2014")
-        btFeedbackLabel.Text = "FB: " .. fbTxt
+        local flashing = (tick() < autoBt.flashUntil)
+        local fbTxt = colRT(flashing and RT.jade or RT.silver, autoBt.feedback or "\u2014")
+        btFeedbackLabel.Text = fbTxt
         btFeedbackLabel.RichText = true
-        btFeedbackLabel.TextColor3 = J.text
+        btFeedbackLabel.TextColor3 = flashing and J.jade or J.silver
     end
 
     -- TECHNIQUES
