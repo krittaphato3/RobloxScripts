@@ -1,0 +1,13 @@
+# Scratch / utility files
+_balance_check.js
+node_modules/
+.zcode/
+
+# Backup files
+*.bak
+_*.py
+_*.txt.bak
+
+# OS metadata
+Thumbs.db
+.DS_Store
