@@ -2112,13 +2112,18 @@ local t = p:match("^%s*(.-)%s*$") or p
 if t == "" or t:lower() == "none" then return nil end
 return t
 end
+local function addCommas(n)
+local s = string.format("%d", math.floor(n + 0.5))
+local rev = s:reverse():gsub("(%d%d%d)", "%1,"):gsub(",$", "")
+return rev:reverse()
+end
 local function fmtN(n)
 if n == nil or n ~= n then return "—" end
 local a = math.abs(n)
-if a >= 1e9 then return ("%.2fB"):format(n/1e9) end
-if a >= 1e6 then return ("%.2fM"):format(n/1e6) end
-if a >= 1e3 then return ("%.2fK"):format(n/1e3) end
-return tostring(math.floor(n + 0.5))
+if a >= 1e9 then return string.format("%.2fB (%s)", n/1e9, addCommas(n)) end
+if a >= 1e6 then return string.format("%.2fM (%s)", n/1e6, addCommas(n)) end
+if a >= 1e3 then return string.format("%.2fK (%s)", n/1e3, addCommas(n)) end
+return addCommas(n)
 end
 local function fmtRate(n)
 if n == nil or n ~= n then return "—" end
@@ -2127,12 +2132,14 @@ end
 local function fmtT(s)
 if s == nil or s ~= s or s >= 1e9 then return "—" end
 if s <= 0 then return "0s" end
-local h = math.floor(s / 3600)
-local m = math.floor((s % 3600) / 60)
+local d  = math.floor(s / 86400)
+local h  = math.floor((s % 86400) / 3600)
+local m  = math.floor((s % 3600) / 60)
 local sc = math.floor(s % 60)
-if h > 0 then return ("%dh %dm %ds"):format(h, m, sc) end
-if m > 0 then return ("%dm %ds"):format(m, sc) end
-return ("%ds"):format(sc)
+if d > 0 then return string.format("%dd %dh %dm", d, h, m) end
+if h > 0 then return string.format("%dh %dm %ds", h, m, sc) end
+if m > 0 then return string.format("%dm %ds", m, sc) end
+return string.format("%ds", sc)
 end
 local function pct(x) return ("%.1f%%"):format((x or 0) * 100) end
 
@@ -2809,6 +2816,7 @@ onHerbsChanged   = reconcileList
 loadSettings()
 buildOverlays()
 buildWindow()
+pcall(pollCultProfile)
 armRejoin()
 setVisible(true)
 setMode(State.mode)
@@ -2822,11 +2830,17 @@ toast("The Jianghu Menu ready", "good")
 -- live distance / count ticker (uses squared distance for speed)
 track(task.spawn(function()
 local acc, hb = 0, nil
+local pollProfileAcc = 0
 hb = RunService.Heartbeat:Connect(function(dt)
 if not alive then hb:Disconnect(); return end
 acc = acc + dt
 if acc < (1 / CONFIG.DistanceHz) then return end
 acc = 0
+pollProfileAcc = pollProfileAcc + dt
+if pollProfileAcc >= 2.0 then
+pollProfileAcc = 0
+pcall(pollCultProfile)
+end
 for _, row in pairs(rows) do
 -- use distSqTo for display (convert back to studs only for text)
 local h = nearestInstanceOf(row.typeId)
