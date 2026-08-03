@@ -2449,7 +2449,7 @@ updateStatsPage = function()
     if not cultRichLabel then return end
 
     if not cultState then
-        cultRichLabel.Text = colRT(RT.dim, "waiting for first Cultivation.state_updated\u2026\n(start meditating or wait ~1s)")
+        cultRichLabel.Text = colRT(RT.dim, "waiting for first Cultivation.state_updated\226\128\166\n(start meditating or wait ~1s)")
         pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
         return
     end
@@ -2459,7 +2459,7 @@ updateStatsPage = function()
     local gaining = (cultState.Meditating == true)
     local node   = cultState[active]
     if not node then
-        cultRichLabel.Text = colRT(RT.dim, "waiting for cultivation data\u2026")
+        cultRichLabel.Text = colRT(RT.dim, "waiting for cultivation data\226\128\166")
         pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
         return
     end
@@ -2522,7 +2522,7 @@ updateStatsPage = function()
     if gaining then
         stateWord = colRT(RT.jade, "MEDITATING")
     elseif idle then
-        stateWord = colRT(RT.warm, "IDLE") .. colRT(RT.dim, " \u00b7 not cultivating")
+        stateWord = colRT(RT.warm, "IDLE") .. colRT(RT.dim, " \194\183 not cultivating")
     else
         stateWord = colRT(RT.warm, "IDLE")
     end
@@ -2537,12 +2537,12 @@ updateStatsPage = function()
     if minor < 10 and prefix and prefix ~= "" then
         nextLabel = colRT(RT.dim, prefix .. " " .. (ROMAN[minor+1] or tostring(minor+1)))
     elseif minor >= 10 then
-        nextLabel = colRT(RT.warm, "Major " .. (major+1) .. " \u00b7 Minor 1  (new tier name not broadcast)")
+        nextLabel = colRT(RT.warm, "Major " .. (major+1) .. " \194\183 Minor 1  (new tier name not broadcast)")
     else
-        nextLabel = colRT(RT.dim, "Major " .. major .. " \u00b7 Minor " .. (minor+1))
+        nextLabel = colRT(RT.dim, "Major " .. major .. " \194\183 Minor " .. (minor+1))
     end
     table.insert(L, labelRT("REALM") .. "  " .. heroRT(accent, node.Stage or "?")
-        .. "   " .. colRT(RT.dim, "M" .. major .. "\u00b7m" .. minor) .. "  \u2192  " .. nextLabel)
+        .. "   " .. colRT(RT.dim, "M" .. major .. "\194\183m" .. minor) .. "  \226\134\146  " .. nextLabel)
 
     -- ESSENCE
     local cur   = node.Current or 0
@@ -2561,7 +2561,7 @@ updateStatsPage = function()
 
     -- TIME TO COST
     local tCost = (rate and rate > 0 and gap > 0) and (gap / rate) or (gap <= 0 and 0 or nil)
-    table.insert(L, labelRT("TIME \u2192 COST") .. "  " .. heroRT(accent, fmtT(tCost)))
+    table.insert(L, labelRT("TIME \226\134\146 COST") .. "  " .. heroRT(accent, fmtT(tCost)))
 
     -- CHANCE
     local chance = node.BreakthroughChance or 0
@@ -2571,7 +2571,7 @@ updateStatsPage = function()
     local vtx    = vertexInfo(fit)
 
     table.insert(L, labelRT("CHANCE") .. " now " .. colRT(RT.text, pct(chance))
-        .. "   " .. colRT(RT.dim, "\u0394 " .. pctSlope(cultObs.cslope) .. " obs"))
+        .. "   " .. colRT(RT.dim, "\206\148 " .. pctSlope(cultObs.cslope) .. " obs"))
     local chCostLine = labelRT("CHANCE @ COST") .. " " .. colRT(RT.jade, pct(chCost))
         .. colRT(RT.dim, "  (" .. modelName .. " fit, n=" .. (fit and fit.n or 0) .. ")")
     if vtx and vtx.concave and vtx.ch and vtx.ch < 1 then
@@ -2580,22 +2580,22 @@ updateStatsPage = function()
     table.insert(L, chCostLine)
 
     -- ATTEMPT WHEN
-    table.insert(L, labelRT("ATTEMPT WHEN  \u00b7 " .. modelName .. " model"))
+    table.insert(L, labelRT("ATTEMPT WHEN  \194\183 " .. modelName .. " model"))
     for _, T in ipairs({0.80, 0.90, 0.95, 0.99}) do
         local t, tag = attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
         local rhs
         if t == nil then
-            rhs = colRT(RT.crimson, "\u2014  ") .. colRT(RT.dim, "(" .. tostring(tag) .. ")")
+            rhs = colRT(RT.crimson, "\226\128\148  ") .. colRT(RT.dim, "(" .. tostring(tag) .. ")")
         elseif tag == "attempt now" then
             rhs = colRT(RT.jade, "now") .. colRT(RT.dim, "  (chance & essence both met)")
         elseif tag == "chance met now; gate = essence" then
-            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met now \u00b7 gate = essence)")
+            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met now \194\183 gate = essence)")
         elseif tag == "ok@cost" then
-            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met by cost \u00b7 gate = essence)")
+            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met by cost \194\183 gate = essence)")
         else
             rhs = colRT(accent, fmtT(t)) .. colRT(RT.warm, "  (overfill past cost)")
         end
-        table.insert(L, "   \u2265" .. math.floor(T*100) .. "%  \u2192  " .. rhs)
+        table.insert(L, "   \226\137\165" .. math.floor(T*100) .. "%  \226\134\146  " .. rhs)
     end
     if modelName == "linear" then
         table.insert(L, colRT(RT.dim, "   linear slope can't see curve-bend near the top;"))
@@ -2606,7 +2606,7 @@ updateStatsPage = function()
     end
 
     if node.BreakthroughWarning and node.BreakthroughWarning ~= "" then
-        table.insert(L, colRT(RT.warm, "\u26a0 " .. node.BreakthroughWarning))
+        table.insert(L, colRT(RT.warm, "\226\154\160 " .. node.BreakthroughWarning))
     end
     local lock = cultState.RealmLocks and cultState.RealmLocks[active]
     if lock then table.insert(L, colRT(RT.crimson, "REALM LOCKED (" .. active .. ")")) end
@@ -2615,17 +2615,17 @@ updateStatsPage = function()
     if autoBt.awaiting and cultState and autoBt.awaitPath then
         local n = cultState[autoBt.awaitPath]
         if n and n.Stage and n.Stage ~= autoBt.awaitStage then
-            autoBt.feedback = "\u2713 REALM UP \u2192 " .. tostring(n.Stage)
+            autoBt.feedback = "\226\156\147 REALM UP \226\134\146 " .. tostring(n.Stage)
             autoBt.flashUntil = tick() + 2.0
             autoBt.awaiting = false
         elseif (tick() - autoBt.lastFire) > 8 then
-            autoBt.feedback = "roll resolved \u00b7 essence reset \u00b7 re-grinding"
+            autoBt.feedback = "roll resolved \194\183 essence reset \194\183 re-grinding"
             autoBt.awaiting = false
         end
     end
     if btFeedbackLabel then
         local flashing = (tick() < autoBt.flashUntil)
-        local fbTxt = colRT(flashing and RT.jade or RT.silver, autoBt.feedback or "\u2014")
+        local fbTxt = colRT(flashing and RT.jade or RT.silver, autoBt.feedback or "\226\128\148")
         btFeedbackLabel.Text = fbTxt
         btFeedbackLabel.RichText = true
         btFeedbackLabel.TextColor3 = flashing and J.jade or J.silver
@@ -2633,7 +2633,7 @@ updateStatsPage = function()
 
     -- TECHNIQUES
     table.insert(L, "")
-    table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \u00d7" .. tostring(node.TechniqueMultiplier)))
+    table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \195\151" .. tostring(node.TechniqueMultiplier)))
     local techs = cultState.Techniques
     if type(techs) == "table" then
         local keys = {}
@@ -2644,10 +2644,10 @@ updateStatsPage = function()
             if type(t) == "table" then
                 local flags = (t.affects_growth and "G" or "") .. (t.affects_recovery and "R" or "")
                 local isActive = (t.path == active and t.affects_growth and t.multiplier == node.TechniqueMultiplier)
-                local mark = isActive and colRT(RT.jade, "  \u25c4 equipped") or ""
+                local mark = isActive and colRT(RT.jade, "  \226\151\132 equipped") or ""
                 local pcol = (t.path == "Qi") and RT.cyan or RT.warm
-                table.insert(L, "   \u2022 " .. colRT(RT.text, tostring(t.name or "?"))
-                    .. "  " .. colRT(pcol, "\u00d7" .. tostring(t.multiplier or "?"))
+                table.insert(L, "   \226\128\162 " .. colRT(RT.text, tostring(t.name or "?"))
+                    .. "  " .. colRT(pcol, "\195\151" .. tostring(t.multiplier or "?"))
                     .. "  " .. colRT(RT.dim, "[" .. flags .. "]") .. mark)
             end
         end
@@ -2658,15 +2658,15 @@ updateStatsPage = function()
     local zb = cultState.ZoneMultiplierBody or 0
     local hereMult = (active == "Qi") and zq or zb
     table.insert(L, "")
-    table.insert(L, labelRT("ZONES") .. colRT(RT.dim, "  in band ") .. heroSmRT(accent, fmtN(hereMult) .. "\u00d7")
-        .. colRT(RT.dim, "   Qi " .. fmtN(zq) .. "\u00d7 \u00b7 Body " .. fmtN(zb) .. "\u00d7   [req\u2248Major]"))
+    table.insert(L, labelRT("ZONES") .. colRT(RT.dim, "  in band ") .. heroSmRT(accent, fmtN(hereMult) .. "\195\151")
+        .. colRT(RT.dim, "   Qi " .. fmtN(zq) .. "\195\151 \194\183 Body " .. fmtN(zb) .. "\195\151   [req\226\137\136Major]"))
     local function zrow(z)
         local q = qualZone(z.path, z.req)
         local here = (z.mult == hereMult and (z.path == active or z.path == "All"))
-        local arrow = here and colRT(accent, bRT("  \u25c4 you")) or ""
+        local arrow = here and colRT(accent, bRT("  \226\151\132 you")) or ""
         local tag = (z.path == "All") and colRT(RT.dim, "all") or colRT(accent, z.path:lower())
-        local mt = here and heroSmRT(accent, fmtN(z.mult) .. "\u00d7") or colRT(RT.text, fmtN(z.mult) .. "\u00d7")
-        return "   " .. (q and colRT(RT.jade, "\u2713") or colRT(RT.dim, "\u00b7")) .. " " .. mt
+        local mt = here and heroSmRT(accent, fmtN(z.mult) .. "\195\151") or colRT(RT.text, fmtN(z.mult) .. "\195\151")
+        return "   " .. (q and colRT(RT.jade, "\226\156\147") or colRT(RT.dim, "\194\183")) .. " " .. mt
             .. colRT(RT.dim, "  req" .. z.req .. " ") .. tag .. arrow
     end
     for _, z in ipairs(ZONES) do if z.path == "All" then table.insert(L, zrow(z)) end end
@@ -2680,13 +2680,13 @@ updateStatsPage = function()
     local oParts = {}
     for _, z in ipairs(ZONES) do
         if z.path == oth then
-            table.insert(oParts, (qualZone(z.path, z.req) and colRT(RT.jade, "\u2713") or colRT(RT.dim, "\u00b7"))
-                .. colRT(oAcc, fmtN(z.mult) .. "\u00d7") .. colRT(RT.dim, "(" .. z.req .. ")"))
+            table.insert(oParts, (qualZone(z.path, z.req) and colRT(RT.jade, "\226\156\147") or colRT(RT.dim, "\194\183"))
+                .. colRT(oAcc, fmtN(z.mult) .. "\195\151") .. colRT(RT.dim, "(" .. z.req .. ")"))
         end
     end
-    table.insert(L, colRT(RT.dim, "\u25b9 " .. oth:upper()) .. "  "
+    table.insert(L, colRT(RT.dim, "\226\150\185 " .. oth:upper()) .. "  "
         .. colRT(oAcc, oNode and (oNode.Stage or "?") or "?")
-        .. "  " .. colRT(RT.dim, "chance ") .. colRT(RT.text, oNode and pct(oNode.BreakthroughChance) or "\u2014")
+        .. "  " .. colRT(RT.dim, "chance ") .. colRT(RT.text, oNode and pct(oNode.BreakthroughChance) or "\226\128\148")
         .. "   " .. table.concat(oParts, "  "))
 
     -- PROFILE (compact)
