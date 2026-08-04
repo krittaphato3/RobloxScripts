@@ -2108,48 +2108,47 @@ do
     twLoop(ambientB, {Position = UDim2.new(1,-180,1,-150)}, 9)
 end
 
--- header strip (40px, ink-dark)
-local header = mk("Frame", {Size = UDim2.new(1,0,0,40), Position = UDim2.new(0,0,0,0),
-    BackgroundColor3 = J.ink, BorderSizePixel = 0, ZIndex = 3}, statsPage)
-statusDot = mk("Frame", {Size = UDim2.new(0,9,0,9), Position = UDim2.new(0,12,0.5,-4),
-    BackgroundColor3 = J.disabled, BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 4}, header)
-corner(statusDot, 9)
-twLoop(statusDot, {BackgroundTransparency = 0.5}, 1.1)  -- 0 → 0.5 → 0 pulse
-do
-    local hdrTitle = mk("TextLabel", {Size = UDim2.new(1,-150,1,0), Position = UDim2.new(0,28,0,0),
-        BackgroundTransparency = 1, Text = "CULTIVATION DASHBOARD",
-        TextColor3 = J.text, TextSize = 13, Font = FONT_MONO,
-        TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 4}, header)
-    setWeight(hdrTitle, Enum.FontWeight.SemiBold)
-    mk("TextLabel", {Size = UDim2.new(0,40,1,0), Position = UDim2.new(1,-150,0,0),
-        BackgroundTransparency = 1, Text = "ENI", TextColor3 = J.amber, TextSize = 10, Font = FONT_MONO,
-        TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 4}, header)
-end
-
--- accent line (2px) at header bottom — Qi jade / Body amber + gliding white shimmer
-accentLine = mk("Frame", {Size = UDim2.new(1,0,0,2), Position = UDim2.new(0,0,1,-2),
-    BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, header)
+-- accent line (2px) at very top — Qi jade / Body amber + gliding white shimmer
+accentLine = mk("Frame", {Size = UDim2.new(1,0,0,2), Position = UDim2.new(0,0,0,0),
+    BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, statsPage)
 accentShimmer = mk("Frame", {Size = UDim2.new(0.3,0,1,0), Position = UDim2.new(0,0,0,0),
     BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.55,
     BorderSizePixel = 0, ZIndex = 5}, accentLine)
 corner(accentShimmer, 4)
 twLoop(accentShimmer, {Position = UDim2.new(0.7,0,0,0)}, 2.6)
 
--- safe strip — single-line truth about hook safety
-safeStripLabel = mk("TextLabel", {Size = UDim2.new(1,-24,0,18), Position = UDim2.new(0,12,0,42),
+-- safe strip — single-line truth about hook safety, status dot inline at left edge
+safeStripLabel = mk("TextLabel", {Size = UDim2.new(1,-38,0,16), Position = UDim2.new(0,26,0,8),
     BackgroundTransparency = 1, Text = "SAFE · 0 fires · 0 hooks · reads state_updated only",
     TextColor3 = J.jade, TextSize = 10, Font = FONT_MONO,
     TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3}, statsPage)
+statusDot = mk("Frame", {Size = UDim2.new(0,9,0,9), Position = UDim2.new(0,8,0,12),
+    BackgroundColor3 = J.disabled, BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 4}, statsPage)
+corner(statusDot, 9)
+twLoop(statusDot, {BackgroundTransparency = 0.5}, 1.1)  -- 0 → 0.5 → 0 pulse
+
+-- hairline divider above the auto-bt control bar (mimics Settings separator idiom)
+do
+    local div = mk("Frame", {Size = UDim2.new(1,-16,0,1), Position = UDim2.new(0,8,0,29),
+        BackgroundColor3 = J.border, BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 3}, statsPage)
+    corner(div, 1)
+end
 
 -- auto-bt control bar (smart pill + slim feedback + body toggle, side by side)
-autoBtBar = mk("Frame", {Size = UDim2.new(1,-16,0,30), Position = UDim2.new(0,8,0,62),
-    BackgroundColor3 = Color3.fromRGB(20,23,31), BorderSizePixel = 0, ZIndex = 3}, statsPage)
+autoBtBar = mk("Frame", {Size = UDim2.new(1,-16,0,34), Position = UDim2.new(0,8,0,34),
+    BackgroundColor3 = J.charcoal, BorderSizePixel = 0, ZIndex = 3}, statsPage)
 corner(autoBtBar, 8)
 stroke(autoBtBar, J.border, 1, 0.5)
+do
+    -- 2px jade tick on the left edge, mirrors the sectionHead idiom
+    local tick_ = mk("Frame", {Size = UDim2.new(0,2,1,-6), Position = UDim2.new(0,3,0,3),
+        BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, autoBtBar)
+    corner(tick_, 1)
+end
 autoBtPill = mk("TextButton", {
     Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)", TextColor3 = Color3.fromRGB(150,162,178), TextSize = 11,
     Font = FONT_BODY, AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(46,51,66),
-    BorderSizePixel = 0, Size = UDim2.new(0.62,-6,1,-6), Position = UDim2.new(0,3,0,3),
+    BorderSizePixel = 0, Size = UDim2.new(0.62,-10,1,-6), Position = UDim2.new(0,10,0,3),
     TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
 }, autoBtBar)
 corner(autoBtPill, 6)
@@ -2180,7 +2179,7 @@ do
 end
 
 -- scroll container — watermarked charcoal surface (not fully transparent)
-statsScroll = mk("ScrollingFrame", {Size = UDim2.new(1,-16,1,-100), Position = UDim2.new(0,8,0,98),
+statsScroll = mk("ScrollingFrame", {Size = UDim2.new(1,-16,1,-76), Position = UDim2.new(0,8,0,74),
     BackgroundColor3 = J.charcoal, BackgroundTransparency = 0, BorderSizePixel = 0,
     ScrollBarThickness = 4, ScrollBarImageColor3 = J.border,
     CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3}, statsPage)
@@ -2265,14 +2264,14 @@ local RT = {
     crimson = "rgb(220,38,38)",
     text  = "rgb(245,245,240)",
     silver = "rgb(156,163,175)",
-    dim   = "rgb(100,112,128)",
+    dim   = "rgb(138,148,168)",
     cyan  = "rgb(96,200,214)",
     warm  = "rgb(224,164,88)",
     barBg = "rgb(42,42,53)",
 }
 local function colRT(c, t) return '<font color="' .. c .. '">' .. tostring(t) .. "</font>" end
 local function bRT(t) return "<b>" .. tostring(t) .. "</b>" end
-local function labelRT(t) return colRT("rgb(100,112,128)", '<font size="9">' .. tostring(t) .. "</font>") end
+local function labelRT(t) return colRT("rgb(138,148,168)", '<font size="9">' .. tostring(t) .. "</font>") end
 local function heroRT(c, t) return colRT(c, '<font size="15">' .. bRT(tostring(t)) .. "</font>") end
 local function heroSmRT(c, t) return colRT(c, '<font size="12">' .. bRT(tostring(t)) .. "</font>") end
 local function barRT(frac, width, fillColor)
@@ -2501,7 +2500,7 @@ end
 dbg("stats page build")
 
 -- rich label lives inside the new scroll (LineHeight 1.18 for premium density)
-local cultRichLabel = label({Text = "", Font = FONT_MONO, TextSize = 12,
+local cultRichLabel = label({Text = "", Font = FONT_MONO, TextSize = 13,
     TextColor3 = J.text, TextWrapped = true, RichText = true,
     AutomaticSize = Enum.AutomaticSize.Y, LineHeight = 1.18,
     Size = UDim2.new(1,0,0,0), TextXAlignment = Enum.TextXAlignment.Left,
