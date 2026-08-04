@@ -187,6 +187,8 @@ lastScanNodes = 0, lastScanHerbs = 0, scanning = false,
 _prevCount = 0,
 }
 local bootTime = os.clock()  -- suppress scan logs during first 5s
+local autoBt                        -- forward declaration (assigned later; visible to saveSettings/loadSettings/buildSettings)
+local _setBodyBtWithConfirm          -- forward declaration (defined later, after autoBt)
 ------------------------------------------------------------------ helpers
 local function keyCodeFromName(name, fallback)
 if type(name) ~= "string" then return fallback end
@@ -218,6 +220,9 @@ stop   = Binds.stop   and Binds.stop.Name   or "RightControl",
 SelectedTypes = selCopy,
 ShowToasts    = CONFIG.ShowToasts,
 WindowSize    = {X = CONFIG.WindowSize.X, Y = CONFIG.WindowSize.Y},
+AutoBtEnabled     = autoBt.enabled,
+AutoBtBodyEnabled = autoBt.bodyEnabled,
+AutoBtMinChance   = autoBt.minChance,
 }
 pcall(function() writefile(SaveFileName, HttpService:JSONEncode(data)) end)
 end)
@@ -241,6 +246,9 @@ if type(data.ShowToasts) == "boolean" then CONFIG.ShowToasts = data.ShowToasts e
 if type(data.WindowSize) == "table" then
 if type(data.WindowSize.X) == "number" then CONFIG.WindowSize = Vector2.new(data.WindowSize.X, data.WindowSize.Y) end
 end
+if type(data.AutoBtEnabled) == "boolean" then autoBt.enabled = data.AutoBtEnabled end
+if type(data.AutoBtBodyEnabled) == "boolean" then autoBt.bodyEnabled = data.AutoBtBodyEnabled end
+if type(data.AutoBtMinChance) == "number" then autoBt.minChance = data.AutoBtMinChance end
 end
 local function persistAutoStart(on)
 CONFIG.AutoStart = on and true or false
@@ -1523,6 +1531,33 @@ label({Text = "Toast notifications", TextSize = 13, TextColor3 = J.text,
 Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-60,1,0), AutomaticSize = Enum.AutomaticSize.X}, trow)
 local tg = toggleSwitch(trow, function() return CONFIG.ShowToasts end, function(v) CONFIG.ShowToasts = v end)
 tg.Position = UDim2.new(1,-46,0.5,-13)
+-- CULTIVATION (auto-bt synced with Stats tab engine)
+sectionHead(scroll, "Cultivation", "automatic breakthrough control")
+-- row: AUTO-BT master toggle (Qi-safe)
+do local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
+	label({Text = "Auto-Breakthrough (Qi-safe)", TextSize = 13, TextColor3 = J.text,
+	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-60,1,0), AutomaticSize = Enum.AutomaticSize.X,
+	TextYAlignment = Enum.TextYAlignment.Center}, row)
+	local qiTm = toggleSwitch(row,
+		function() return autoBt.enabled end,
+		function(v) autoBt.enabled = v
+			if v then autoBt.bootTime = os.clock(); autoBt.lastFire = tick() end
+		end)
+	qiTm.Position = UDim2.new(1,-46,0.5,-13)
+end
+-- row: BODY Auto-Breakthrough (lethal — confirm-gated via setter overlay)
+do local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
+	label({Text = "Body Auto-Breakthrough", TextSize = 13, TextColor3 = J.text,
+	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-180,1,0), AutomaticSize = Enum.AutomaticSize.X,
+	TextYAlignment = Enum.TextYAlignment.Center}, row)
+	local warnLbl = label({Text = "(lethal — can die!)", TextSize = 11, TextColor3 = J.crimson,
+	Position = UDim2.new(0,150,0,0), Size = UDim2.new(0,120,1,0),
+	TextYAlignment = Enum.TextYAlignment.Center}, row)
+	local bodyTg = toggleSwitch(row,
+		function() return autoBt.bodyEnabled end,
+		function(v) _setBodyBtWithConfirm(v, bodyTg) end)
+	bodyTg.Position = UDim2.new(1,-46,0.5,-13)
+end
 -- MOVEMENT
 sectionHead(scroll, "Movement", "higher settle = safer vs anti-cheat")
 local function segRow(lblText, opts, get, set)
@@ -1861,7 +1896,7 @@ end
 -- ─── AUTO-BREAKTHROUGH STATE (IIFE body level — accessible everywhere) ───
 local AUTOBT_COOLDOWN   = 5
 local AUTOBT_BOOT_GRACE = 3
-local autoBt = {
+autoBt = {
 	enabled = false, bodyEnabled = false, minChance = 0,
 	cooldown = AUTOBT_COOLDOWN, lastFire = 0,
 	bootGrace = AUTOBT_BOOT_GRACE, bootTime = 0,
@@ -1885,6 +1920,101 @@ autoBt.awaitStage = (cultState and cultState[path] and cultState[path].Stage) or
 autoBt.flashUntil = tick() + 1.2
 local chNow = (cultState and cultState[path] and cultState[path].BreakthroughChance) or 0
 autoBt.feedback = "fired " .. path .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
+end
+-- ─── BODY AUTO-BT CONFIRM HELPERS (used by Settings Cultivation section) ───
+-- _tweenToggleKnob: visually sync the toggleSwitch knob/track to a target state
+local function _tweenToggleKnob(tgRef, toOn)
+	if not tgRef then return end
+	local knob
+	for _, c in ipairs(tgRef:GetChildren()) do
+		if c:IsA("Frame") then knob = c; break end
+	end
+	if knob then
+		local goalPos = toOn and UDim2.new(1,-23,0.5,-10) or UDim2.new(0,3,0.5,-10)
+		TweenSvc:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = goalPos}):Play()
+	end
+	if toOn then
+		tgRef.BackgroundColor3 = J.jadeDk
+		local g = tgRef:FindFirstChild("tg")
+		if not g then g = grad(tgRef, J.jade, J.jadeDk, 90); if g then g.Name = "tg" end end
+	else
+		tgRef.BackgroundColor3 = J.raised
+		local g = tgRef:FindFirstChild("tg")
+		if g then g:Destroy() end
+	end
+end
+
+-- _setBodyBtWithConfirm: gates the lethal Body Auto-BT behind a confirm overlay.
+-- OFF is always safe → immediate unset. ON → shows the confirm overlay first.
+local _bodyConfirmOverlay = nil
+_setBodyBtWithConfirm = function(v, toggleRef)
+	if not v then
+		autoBt.bodyEnabled = false
+		autoBt.bodyConfirmPending = false
+		pcall(saveSettings)
+		return
+	end
+	-- turning ON — show confirm overlay (lazy build, cached)
+	if not settingsFrame then
+		autoBt.bodyEnabled = false  -- Settings never opened; refuse to arm
+		pcall(saveSettings)
+		return
+	end
+	if not _bodyConfirmOverlay then
+		local overlay = mk("Frame", {
+			Size = UDim2.new(1,0,1,0), BackgroundColor3 = J.ink,
+			BackgroundTransparency = 0.35, ZIndex = 20, Visible = false,
+		}, settingsFrame)
+		local card = mk("Frame", {
+			Size = UDim2.new(0.7,0,0,170), Position = UDim2.new(0.15,0,0.5,-85),
+			BackgroundColor3 = J.midnight, BorderSizePixel = 0, ZIndex = 21,
+		}, overlay)
+		corner(card, 10)
+		stroke(card, J.crimson, 1.5, 0)
+		mk("TextLabel", {
+			Text = "\226\154\160 Body breakthrough can be lethal",
+			Font = FONT_DISPLAY, TextSize = 16, TextColor3 = J.crimson,
+			BackgroundTransparency = 1, Size = UDim2.new(1,-32,0,28),
+			Position = UDim2.new(0,16,0,16),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Center,
+		}, card)
+		mk("TextLabel", {
+			Text = "Confirm to arm Body auto-breakthrough. The script will fire Body breakthroughs when essence and chance thresholds clear.",
+			Font = FONT_BODY, TextSize = 12, TextColor3 = J.silver,
+			BackgroundTransparency = 1, Size = UDim2.new(1,-32,0,54),
+			Position = UDim2.new(0,16,0,48), TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+		}, card)
+		local cancelBtn = mk("TextButton", {
+			Text = "CANCEL", Font = FONT_BODY, TextSize = 13,
+			TextColor3 = J.silver, BackgroundColor3 = J.raised, BorderSizePixel = 0, AutoButtonColor = false,
+			Size = UDim2.new(0.5,-24,0,38), Position = UDim2.new(0,8,1,-46), ZIndex = 22,
+		}, card)
+		corner(cancelBtn, 8)
+		cancelBtn.MouseButton1Click:Connect(function()
+			autoBt.bodyEnabled = false
+			autoBt.bodyConfirmPending = false
+			pcall(saveSettings)
+			overlay.Visible = false
+			_tweenToggleKnob(toggleRef, false)
+		end)
+		local armBtn = mk("TextButton", {
+			Text = "ARM BODY", Font = FONT_BODY, TextSize = 13,
+			TextColor3 = J.text, BackgroundColor3 = J.crimson, BorderSizePixel = 0, AutoButtonColor = false,
+			Size = UDim2.new(0.5,-24,0,38), Position = UDim2.new(0.5,16,1,-46), ZIndex = 22,
+		}, card)
+		corner(armBtn, 8)
+		armBtn.MouseButton1Click:Connect(function()
+			autoBt.bodyEnabled = true
+			autoBt.bodyConfirmPending = false
+			pcall(saveSettings)
+			overlay.Visible = false
+			_tweenToggleKnob(toggleRef, true)
+		end)
+		_bodyConfirmOverlay = overlay
+	end
+	_bodyConfirmOverlay.Visible = true
 end
 local function buildWindow()
 guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
@@ -1943,7 +2073,7 @@ local statsPage = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency
 -- forward-declared upvalues used by click handlers (must be locals BEFORE assignment
 -- so their own closures can see them as upvalues — same pattern as the old btEnableBtn)
 local statsScroll, statusDot, accentLine, accentShimmer, safeStripLabel
-local autoBtBar, autoBtPill, btFeedbackLabel, bodyPill
+local autoBtBar, autoBtPill, btFeedbackLabel
 local ambientA, ambientB
 
 -- looping-tween helper (mirrors JianghuStats twLoop: reversed, -1 repeat)
@@ -2036,21 +2166,6 @@ autoBtPill.MouseLeave:Connect(function()
     TweenSvc:Create(autoBtPill, TweenInfo.new(0.2), {BackgroundColor3 = autoBt.enabled
         and (tick() < autoBt.flashUntil and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64))
         or Color3.fromRGB(46,51,66)}):Play()
-end)
-
-bodyPill = mk("TextButton", {
-    Text = "Body: OFF (safe)", TextColor3 = J.text, TextSize = 10, Font = FONT_BODY,
-    AutoButtonColor = false, BackgroundColor3 = J.charcoal, BorderSizePixel = 0,
-    Size = UDim2.new(0,88,1,-6), Position = UDim2.new(0.62,3,0,3),
-    TextXAlignment = Enum.TextXAlignment.Center, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
-}, autoBtBar)
-corner(bodyPill, 6)
-bodyPill.MouseEnter:Connect(function()
-    TweenSvc:Create(bodyPill, TweenInfo.new(0.12), {BackgroundColor3 = J.raised}):Play()
-end)
-bodyPill.MouseLeave:Connect(function()
-    TweenSvc:Create(bodyPill, TweenInfo.new(0.2), {BackgroundColor3 =
-        (autoBt.bodyEnabled or autoBt.bodyConfirmPending) and J.crimson or J.charcoal}):Play()
 end)
 
 btFeedbackLabel = mk("TextLabel", {
@@ -2408,47 +2523,6 @@ autoBtPill.MouseButton1Click:Connect(function()
     end
 end)
 
--- bodyPill click = two-step body confirm (reuses old btBodyBtn onClick logic)
-bodyPill.MouseButton1Click:Connect(function()
-    if autoBt.bodyEnabled then
-        autoBt.bodyEnabled = false
-        autoBt.bodyConfirmPending = false
-        if bodyPill then
-            bodyPill.Text = "Body: OFF (safe)"
-            bodyPill.BackgroundColor3 = J.charcoal
-            bodyPill.TextColor3 = J.text
-        end
-    else
-        if not autoBt.bodyConfirmPending then
-            autoBt.bodyConfirmPending = true
-            if bodyPill then
-                bodyPill.Text = "SURE? BODY CAN DIE"
-                bodyPill.BackgroundColor3 = J.crimson
-                bodyPill.TextColor3 = J.ink
-            end
-            task.spawn(function()
-                task.wait(3)
-                if autoBt.bodyConfirmPending then
-                    autoBt.bodyConfirmPending = false
-                    if bodyPill then
-                        bodyPill.Text = "Body: OFF (safe)"
-                        bodyPill.BackgroundColor3 = J.charcoal
-                        bodyPill.TextColor3 = J.text
-                    end
-                end
-            end)
-        else
-            autoBt.bodyConfirmPending = false
-            autoBt.bodyEnabled = true
-            if bodyPill then
-                bodyPill.Text = "Body: ON (lethal!)"
-                bodyPill.BackgroundColor3 = J.crimson
-                bodyPill.TextColor3 = J.ink
-            end
-        end
-    end
-end)
-
 
 -- ─── STATS UPDATE FUNCTION (RichText) ───
 local statsStartTime = os.clock()
@@ -2509,16 +2583,6 @@ updateStatsPage = function()
                 autoBtPill.TextColor3 = Color3.fromRGB(150,162,178)
                 autoBtPill.BackgroundColor3 = Color3.fromRGB(46,51,66)
             end)
-        end
-    end
-    -- body pill label reflects confirm-lethal two-step state
-    if bodyPill then
-        if autoBt.bodyEnabled then
-            pcall(function() bodyPill.Text = "Body: ON (lethal!)"; bodyPill.BackgroundColor3 = J.crimson; bodyPill.TextColor3 = J.ink end)
-        elseif autoBt.bodyConfirmPending then
-            pcall(function() bodyPill.Text = "SURE? BODY CAN DIE"; bodyPill.BackgroundColor3 = J.crimson; bodyPill.TextColor3 = J.ink end)
-        else
-            pcall(function() bodyPill.Text = "Body: OFF (safe)"; bodyPill.BackgroundColor3 = J.charcoal; bodyPill.TextColor3 = J.text end)
         end
     end
 
