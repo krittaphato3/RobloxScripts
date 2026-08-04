@@ -189,6 +189,7 @@ _prevCount = 0,
 local bootTime = os.clock()  -- suppress scan logs during first 5s
 local autoBt                        -- forward declaration (assigned later; visible to saveSettings/loadSettings/buildSettings)
 local _setBodyBtWithConfirm          -- forward declaration (defined later, after autoBt)
+local pollCultProfile                -- forward declaration (defined inside buildWindow; polled at boot + every ~2s)
 ------------------------------------------------------------------ helpers
 local function keyCodeFromName(name, fallback)
 if type(name) ~= "string" then return fallback end
@@ -1648,6 +1649,10 @@ end
 function closeSettings()
 stopCapture(true)
 if not settingsFrame then return end
+-- hide any lingering body-auto-bt confirm overlay (gear button isn't covered by it)
+if _bodyConfirmOverlay and _bodyConfirmOverlay.Parent then
+_bodyConfirmOverlay.Visible = false
+end
 if gui.settingsPanel then
 -- smooth fade out + slide down
 local tw = TweenSvc:Create(gui.settingsPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
@@ -2244,7 +2249,7 @@ if n == nil or n ~= n then return "—" end
 return fmtN(n) .. "/s"
 end
 local function fmtT(s)
-if s == nil or s ~= s or s >= 1e9 then return "—" end
+if s == nil or s ~= s then return "—" end
 if s <= 0 then return "0s" end
 local d  = math.floor(s / 86400)
 local h  = math.floor((s % 86400) / 3600)
@@ -2470,7 +2475,9 @@ end
 -- subscribe immediately after definition (inside buildWindow scope)
 local cultOk, cultResult = pcall(installCultState)
 if _fkDebug then print("[Jianghu] installCultState: " .. (cultOk and tostring(cultResult) or "ERROR: " .. tostring(cultResult))) end
-local function pollCultProfile()
+-- pollCultProfile is assigned (not `local function`) so it populates the IIFE-level
+-- forward declaration (line ~192) — the boot + heartbeat callers live OUTSIDE buildWindow.
+pollCultProfile = function()
 local c = char()
 if not c then return end
 local function ga(n) local ok,v = pcall(function() return c:GetAttribute(n) end); return ok and v or nil end
@@ -2896,14 +2903,14 @@ local acc, hb = 0, nil
 local pollProfileAcc = 0
 hb = RunService.Heartbeat:Connect(function(dt)
 if not alive then hb:Disconnect(); return end
-acc = acc + dt
-if acc < (1 / CONFIG.DistanceHz) then return end
-acc = 0
 pollProfileAcc = pollProfileAcc + dt
 if pollProfileAcc >= 2.0 then
 pollProfileAcc = 0
 pcall(pollCultProfile)
 end
+acc = acc + dt
+if acc < (1 / CONFIG.DistanceHz) then return end
+acc = 0
 for _, row in pairs(rows) do
 -- use distSqTo for display (convert back to studs only for text)
 local h = nearestInstanceOf(row.typeId)
