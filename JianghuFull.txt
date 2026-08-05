@@ -295,7 +295,11 @@ id         = hid, region = attrs.RegionId or "?",
 instanceId = attrs.HerbInstanceId or model.Name,
 token      = attrs.HarvestToken,
 hold       = tonumber(attrs.HoldDuration) or 1.75,
-pos        = function() return root and root.Position or nil end,
+pos        = function()
+if not root or not root.Parent then return nil end
+local ok, p = pcall(function() return root.Position end)
+return ok and p or nil
+end,
 conn       = nil,
 }
 pcall(function()
@@ -569,10 +573,10 @@ pcall(function() h:ChangeState(Enum.HumanoidStateType.Running) end)
 end
 end
 -- MODE DISPATCH: each mode has its own approach logic
-function Move.approach(h, walkOnly)
+function Move.approach(h, walkOnly, manual)
 local target = h.pos(); local r = hrp()
 if not target or not r then return false end
-if not State.running then return false end
+if not State.running and not manual then return false end
 local mode = walkOnly and "Walk" or State.mode
 if mode == "Walk" then
 -- pure pathfinding walk along the ground
@@ -713,8 +717,11 @@ local function nearestInstanceOf(id)
 local list = State.byType[id]; if not list then return nil end
 local best, bd = nil, 1e9
 for _, h in ipairs(list) do
+-- skip records whose model was harvested/despawned (stale until next scan)
+if h.model and h.model.Parent then
 local d = distTo(h)
 if d < bd then bd = d; best = h end
+end
 end
 return best
 end
@@ -724,8 +731,10 @@ local t = {}
 for id in pairs(State.selectedTypes) do
 if not isTypeLocked(id) and State.byType[id] then
 for _, h in ipairs(State.byType[id]) do
+if h.model and h.model.Parent then
 local d = distTo(h)
 t[#t+1] = { herb = h, d = d }
+end
 end
 end
 end
@@ -753,13 +762,13 @@ local herbs = selectedHerbsSorted()
 return herbs and herbs[1]
 end
 ------------------------------------------------------------------ automation
-local function tryHarvest(h, walkOnly)
+local function tryHarvest(h, walkOnly, manual)
 if log then log(("-> %s [%s]%s"):format(h.id, h.region, walkOnly and " (walk)" or ""), "info") end
-if not Move.approach(h, walkOnly) then
+if not Move.approach(h, walkOnly, manual) then
 return false
 end
 for tries = 1, CONFIG.MaxRetries + 1 do
-if not State.running then return false end
+if not State.running and not manual then return false end
 -- check if already collected by a previous finish_harvest event
 if Harvest.collected[h.instanceId] then
 State.stats.harvested = State.stats.harvested + 1
@@ -778,7 +787,15 @@ end
 -- herb gone but no result — silently skip (was likely collected by finish_harvest)
 return false
 end
-if not withinRange(h) then walkTo(h.pos()); groundSnap(h.pos(), h.pos().Y); task.wait(0.3) end
+-- walk closer if needed (pos() is nil-safe now)
+local p2 = h.pos()
+if not withinRange(h) and p2 then walkTo(p2); groundSnap(p2, p2.Y); task.wait(0.3) end
+-- NEVER fire blind: if still out of range, re-walk next retry instead of
+-- firing a remote the server rejects with "too far" (walk back-and-forth bug)
+if not withinRange(h) then
+if log then log("   still out of range — re-approaching", "info") end
+task.wait(0.25)
+else
 Harvest.lastResult[h.instanceId] = nil
 Harvest.collected[h.instanceId] = nil
 State.invalid = false
@@ -810,8 +827,9 @@ State.invalid = false  -- clear, just retry
 task.wait(0.5)
 -- don't increment failed, just loop again
 -- re-walk to position if needed
-if not withinRange(h) then
-walkTo(h.pos()); groundSnap(h.pos(), h.pos().Y); task.wait(0.3)
+local p3 = h.pos()
+if not withinRange(h) and p3 then
+walkTo(p3); groundSnap(p3, p3.Y); task.wait(0.3)
 end
 else
 -- other server error = retry
@@ -820,6 +838,7 @@ else
 -- no result = timeout, retry
 end
 task.wait(0.25)
+end
 end
 return false
 end
@@ -832,7 +851,11 @@ for _, c in ipairs(_autoBag) do pcall(function() c:Disconnect() end) end
 _autoBag = {}
 end
 local function startAuto()
-if State.running then return end
+if State.running then
+-- already running (e.g. boot auto-resume) — say so instead of silent no-op
+if toast then toast("automation already running", "info") end
+return
+end
 -- require at least one SELECTED type (not necessarily live — respawns resume);
 -- selectedHerbsSorted()==0 would wrongly refuse to start while the world is
 -- fully harvested, halting the "wait for respawn" behavior
@@ -850,6 +873,10 @@ if toast then toast("automation started", "good") end
 if log   then log("automation START  mode=" .. State.mode .. "  strategy=" .. State.strategy, "good") end
 trackAuto(task.spawn(function()
 while alive and State.running do
+-- pcall the whole iteration so a single bad herb record (destroyed model,
+-- nil pos, remote error) can NEVER kill the loop silently and wedge
+-- State.running = true — the "Start auto does nothing" bug
+local okIt, itErr = pcall(function()
 local target = pickHarvestTarget()
 local progressed = false
 if target then
@@ -870,11 +897,19 @@ if toast then toast("no herb types selected — auto stopped", "warn") end
 if log then log("auto STOP — no types selected", "warn") end
 persistAutoStart(false)
 saveSettings()
-break
+return "stop"
 end
 -- types are selected but all herbs are harvested: wait for respawns, don't halt
 end
 task.wait(progressed and 0.15 or CONFIG.IdleWait)
+end)
+if not okIt then
+-- log the error and keep the loop alive (respawn may fix the record)
+if log then log("auto iteration error: " .. tostring(itErr), "bad") end
+task.wait(CONFIG.IdleWait)
+elseif itErr == "stop" then
+break
+end
 end
 State.running = false
 if updateStatus then updateStatus() end
@@ -1238,7 +1273,7 @@ if not gui.statMode then return end
 -- count only selected types that still have LIVE rows (stale persisted selections excluded)
 local sel = 0
 for _, id in ipairs(knownSorted()) do if State.selectedTypes[id] then sel = sel + 1 end end
-gui.statMode.Text  = State.mode
+gui.statMode.Text  = State.mode .. (State.strategy == "Sequence" and " · SEQ" or " · NEAR")
 gui.statTypes.Text = ("types %d/%d"):format(sel, #knownSorted())
 gui.statOk.Text    = ("harvested %d"):format(State.stats.harvested)
 gui.statOk.TextColor3   = State.stats.harvested > 0 and J.jade or J.silver
@@ -1330,8 +1365,9 @@ local h = nearestInstanceOf(typeId)
 if not h then if toast then toast("no live " .. typeId, "warn") end; return end
 if toast then toast("go -> " .. typeId, "info") end
 task.spawn(function()
-local done = tryHarvest(h, false)
-if not done then done = tryHarvest(h, true) end
+-- manual = true: GO works standalone (doesn't require State.running)
+local done = tryHarvest(h, false, true)
+if not done then done = tryHarvest(h, true, true) end
 if not done and log then log("   gave up on " .. typeId, "bad") end
 end)
 end})
