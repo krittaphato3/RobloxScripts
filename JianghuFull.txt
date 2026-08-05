@@ -833,9 +833,14 @@ _autoBag = {}
 end
 local function startAuto()
 if State.running then return end
-if #selectedHerbsSorted() == 0 then
+-- require at least one SELECTED type (not necessarily live — respawns resume);
+-- selectedHerbsSorted()==0 would wrongly refuse to start while the world is
+-- fully harvested, halting the "wait for respawn" behavior
+local anySel = false
+for _ in pairs(State.selectedTypes) do anySel = true; break end
+if not anySel then
 if toast then toast("select a herb type first", "warn") end
-if log   then log("no harvestable types selected", "warn") end
+if log   then log("no herb types selected", "warn") end
 return
 end
 State.running = true
@@ -1230,7 +1235,9 @@ end
 ------------------------------------------------------------------ status bar + header chip
 local function guiUpdateStatus()
 if not gui.statMode then return end
-local sel = 0; for _ in pairs(State.selectedTypes) do sel = sel + 1 end
+-- count only selected types that still have LIVE rows (stale persisted selections excluded)
+local sel = 0
+for _, id in ipairs(knownSorted()) do if State.selectedTypes[id] then sel = sel + 1 end end
 gui.statMode.Text  = State.mode
 gui.statTypes.Text = ("types %d/%d"):format(sel, #knownSorted())
 gui.statOk.Text    = ("harvested %d"):format(State.stats.harvested)
@@ -2299,7 +2306,7 @@ end
 -- strip trailing zeros (and the dot) from a fixed-2-decimal string: "50.00"→"50", "75.60"→"75.6", "75.67"→"75.67"
 local function trimDec(s) return (s:gsub("%.?0+$", "")) end
 local function fmtN(n)
-if n == nil or n ~= n then return "—" end
+if type(n) ~= "number" or n ~= n then return "—" end
 local a = math.abs(n)
 if a >= 1e9 then return trimDec(("%.2f"):format(n/1e9)) .. "B (" .. addCommas(n) .. ")" end
 if a >= 1e6 then return trimDec(("%.2f"):format(n/1e6)) .. "M (" .. addCommas(n) .. ")" end
@@ -2307,7 +2314,7 @@ if a >= 1e3 then return trimDec(("%.2f"):format(n/1e3)) .. "K (" .. addCommas(n)
 return addCommas(n)
 end
 local function fmtRate(n)
-if n == nil or n ~= n then return "—" end
+if type(n) ~= "number" or n ~= n then return "—" end
 return fmtN(n) .. "/s"
 end
 local function fmtT(s)
