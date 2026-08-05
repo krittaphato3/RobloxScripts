@@ -73,6 +73,7 @@ FullScanEvery  = 4,
 NodeCap        = 120000,
 DistanceHz     = 4,
 Mode           = "Adaptive",
+HarvestStrategy = "Nearest",
 WalkSpeed      = 16,
 StopDist       = 32,
 Dwell          = 1.2,
@@ -94,6 +95,7 @@ WindowSize     = nil,  -- nil = use adaptive from viewport on first boot, then s
 local Binds = { toggle = Enum.KeyCode.J, start = Enum.KeyCode.RightShift, stop = Enum.KeyCode.RightControl }
 local SaveFileName = "ForageKit_Settings.json"
 local VALID_MODES  = { Walk = true, Tween = true, Teleport = true, Adaptive = true }
+local VALID_STRATEGIES = { Nearest = true, Sequence = true }
 local FK_URL       = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/JianghuFull.txt"
 ------------------------------------------------------------------ design tokens: palette
 local J = {
@@ -179,7 +181,7 @@ end
 ------------------------------------------------------------------ state
 dbg("state")
 local State = {
-mode = CONFIG.Mode, running = false,
+mode = CONFIG.Mode, strategy = CONFIG.HarvestStrategy, running = false,
 selectedTypes = {}, herbs = {}, byId = {}, byType = {},
 stats = { harvested = 0 },
 invalid = false,
@@ -212,6 +214,7 @@ local data = {
 WalkSpeed     = CONFIG.WalkSpeed,
 Dwell         = CONFIG.Dwell,
 Mode          = State.mode,
+HarvestStrategy = State.strategy,
 AutoStart     = CONFIG.AutoStart,
 Binds         = {
 toggle = Binds.toggle and Binds.toggle.Name or "J",
@@ -236,6 +239,7 @@ if type(data) ~= "table" then return end
 if type(data.WalkSpeed) == "number" then CONFIG.WalkSpeed = data.WalkSpeed end
 if type(data.Dwell)     == "number" then CONFIG.Dwell     = data.Dwell end
 if type(data.Mode) == "string" and VALID_MODES[data.Mode] then State.mode = data.Mode end
+if type(data.HarvestStrategy) == "string" and VALID_STRATEGIES[data.HarvestStrategy] then State.strategy = data.HarvestStrategy end
 if type(data.AutoStart) == "boolean" then CONFIG.AutoStart = data.AutoStart end
 if type(data.Binds) == "table" then
 Binds.toggle = keyCodeFromName(data.Binds.toggle, Binds.toggle)
@@ -259,7 +263,7 @@ end
 local log, updateStatus, onHerbsChanged, toast, shimmer, setScanning
 local refreshSettingsHighlight, openSettings, closeSettings, destroy
 local gui, main, content, tabsBar, listFrame, emptyState, settingsFrame = {}, {}, {}, nil, nil, nil, nil
-local modeButtons, rows, knownTypes, tracked, bindButtons, settingsSegs = {}, {}, {}, {}, {}, {}
+local modeButtons, strategyButtons, rows, knownTypes, tracked, bindButtons, settingsSegs = {}, {}, {}, {}, {}, {}, {}
 local toastHolder = nil
 local guiRoot = nil
 local activeToasts = {}
@@ -731,6 +735,24 @@ local out = {}
 for i, v in ipairs(t) do out[i] = v.herb end
 return out
 end
+-- strategy-aware target selection:
+--  "Nearest"  = current behavior — globally nearest herb among selected types
+--  "Sequence" = walk selected types in list order (alphabetical, same as the herb list);
+--               first type with live herbs wins; within it, always the nearest instance
+local function pickHarvestTarget()
+if State.strategy == "Sequence" then
+local sorted = knownSorted()
+for _, id in ipairs(sorted) do
+if State.selectedTypes[id] and not isTypeLocked(id) and State.byType[id] then
+local h = nearestInstanceOf(id)
+if h then return h end
+end
+end
+return nil
+end
+local herbs = selectedHerbsSorted()
+return herbs and herbs[1]
+end
 ------------------------------------------------------------------ automation
 local function tryHarvest(h, walkOnly)
 if log then log(("-> %s [%s]%s"):format(h.id, h.region, walkOnly and " (walk)" or ""), "info") end
@@ -821,14 +843,12 @@ State.running = true
 persistAutoStart(true)
 saveSettings()
 if toast then toast("automation started", "good") end
-if log   then log("automation START  mode=" .. State.mode, "good") end
+if log   then log("automation START  mode=" .. State.mode .. "  strategy=" .. State.strategy, "good") end
 trackAuto(task.spawn(function()
 while alive and State.running do
-local herbs = selectedHerbsSorted()
+local target = pickHarvestTarget()
 local progressed = false
-if #herbs > 0 then
--- lock onto the nearest herb — don't switch until collected or failed
-local target = herbs[1]
+if target then
 if target and target.model and target.model.Parent then
 if State.invalid then renew() end
 local result = tryHarvest(target, false)
@@ -1379,6 +1399,18 @@ if settingsFrame and settingsFrame.Visible then pcall(function() refreshSettings
 guiUpdateStatus()
 saveSettings()
 end
+local function setStrategy(s)
+State.strategy = s
+for name, mb in pairs(strategyButtons) do
+local on = name == s
+if mb.grad then mb.grad.Enabled = on end
+TweenSvc:Create(mb.btn, TweenInfo.new(0.18), {BackgroundColor3 = on and J.jade or J.charcoal, TextColor3 = on and J.ink or J.silver}):Play()
+if mb.st then TweenSvc:Create(mb.st, TweenInfo.new(0.18), {Color = on and J.jadeDk or J.border}):Play() end
+end
+if settingsFrame and settingsFrame.Visible then pcall(function() refreshSettingsHighlight() end) end
+guiUpdateStatus()
+saveSettings()
+end
 local function selectNearestTypes(n)
 local t = {}
 for id in pairs(State.byType) do
@@ -1787,6 +1819,21 @@ b.MouseEnter:Connect(function() if State.mode ~= m then TweenSvc:Create(b, Tween
 b.MouseLeave:Connect(function() if State.mode ~= m then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.charcoal}):Play() end end)
 b.MouseButton1Click:Connect(function() setMode(m) end)
 end
+-- STRATEGY
+sectionHead(scroll, "Strategy", "how the harvest picks herbs")
+for _, s in ipairs({"Nearest", "Sequence"}) do
+local b = mk("TextButton", {Text = s, Font = FONT_BODY, TextSize = 12, TextColor3 = J.silver,
+BackgroundColor3 = J.charcoal, Size = UDim2.new(1,0,0,36), AutoButtonColor = false}, scroll)
+setWeight(b, Enum.FontWeight.SemiBold); corner(b, 5)
+local st = stroke(b, J.border, 1, 0.3)
+local g = grad(b, J.jade, J.jadeDk, 90); g.Enabled = false
+strategyButtons[s] = {btn = b, st = st, grad = g}
+b.MouseEnter:Connect(function() if State.strategy ~= s then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.raised}):Play() end end)
+b.MouseLeave:Connect(function() if State.strategy ~= s then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.charcoal}):Play() end end)
+b.MouseButton1Click:Connect(function() setStrategy(s) end)
+end
+-- initial paint of the strategy buttons
+setStrategy(State.strategy)
 -- ACTIONS (with divider above)
 local actSpacer = mk("Frame", {Size = UDim2.new(1,0,0,2), BackgroundTransparency = 1}, scroll)
 local actHead = mk("Frame", {Size = UDim2.new(1,0,0,24), BackgroundTransparency = 1}, scroll)
