@@ -395,9 +395,8 @@ for _, rec in ipairs(list) do
 State.byId[rec.instanceId] = rec
 knownTypes[rec.id] = true
 end
-for id in pairs(State.selectedTypes) do
-if not byType[id] then State.selectedTypes[id] = nil end
-end
+-- selection persists across scans (auto-deselect removed): respawned herbs
+-- resume farming without re-selecting the type
 -- prune knownTypes: remove types with zero live instances
 for id in pairs(knownTypes) do
 if not byType[id] then knownTypes[id] = nil end
@@ -855,6 +854,20 @@ local result = tryHarvest(target, false)
 progressed = true
 -- only re-sort after current herb is done (collected or failed)
 end
+end
+if not progressed then
+-- no live herb found this iteration
+local anySel = false
+for _ in pairs(State.selectedTypes) do anySel = true; break end
+if not anySel then
+-- nothing selected at all: stop cleanly instead of spinning forever
+if toast then toast("no herb types selected — auto stopped", "warn") end
+if log then log("auto STOP — no types selected", "warn") end
+persistAutoStart(false)
+saveSettings()
+break
+end
+-- types are selected but all herbs are harvested: wait for respawns, don't halt
 end
 task.wait(progressed and 0.15 or CONFIG.IdleWait)
 end
