@@ -2236,12 +2236,14 @@ local s = string.format("%d", math.floor(n + 0.5))
 local rev = s:reverse():gsub("(%d%d%d)", "%1,"):gsub(",$", "")
 return rev:reverse()
 end
+-- strip trailing zeros (and the dot) from a fixed-2-decimal string: "50.00"→"50", "75.60"→"75.6", "75.67"→"75.67"
+local function trimDec(s) return (s:gsub("%.?0+$", "")) end
 local function fmtN(n)
 if n == nil or n ~= n then return "—" end
 local a = math.abs(n)
-if a >= 1e9 then return string.format("%.2fB (%s)", n/1e9, addCommas(n)) end
-if a >= 1e6 then return string.format("%.2fM (%s)", n/1e6, addCommas(n)) end
-if a >= 1e3 then return string.format("%.2fK (%s)", n/1e3, addCommas(n)) end
+if a >= 1e9 then return trimDec(("%.2f"):format(n/1e9)) .. "B (" .. addCommas(n) .. ")" end
+if a >= 1e6 then return trimDec(("%.2f"):format(n/1e6)) .. "M (" .. addCommas(n) .. ")" end
+if a >= 1e3 then return trimDec(("%.2f"):format(n/1e3)) .. "K (" .. addCommas(n) .. ")" end
 return addCommas(n)
 end
 local function fmtRate(n)
@@ -2769,15 +2771,15 @@ updateStatsPage = function()
     -- PROFILE (compact)
     table.insert(L, "")
     table.insert(L, labelRT("PROFILE"))
-    table.insert(L, colRT(RT.dim, "Root ") .. colRT(RT.text, tostring(cultProfile.root or "?"))
-        .. colRT(RT.dim, "  Const ") .. colRT(RT.text, tostring(cultProfile.const or "?"))
-        .. colRT(RT.dim, "  Luck ") .. colRT(RT.text, tostring(cultProfile.luck or "?"))
-        .. colRT(RT.dim, "  Compr ") .. colRT(RT.text, tostring(cultProfile.compr or "?")))
-    table.insert(L, colRT(RT.dim, "Mastery  Forage ") .. colRT(RT.text, tostring(cultProfile.mf or "?"))
-        .. colRT(RT.dim, "  Alch ") .. colRT(RT.text, tostring(cultProfile.ma or "?"))
-        .. colRT(RT.dim, "  Weapon ") .. colRT(RT.text, tostring(cultProfile.mw or "?"))
-        .. colRT(RT.dim, "  Skill ") .. colRT(RT.text, tostring(cultProfile.ms or "?")))
-    table.insert(L, colRT(RT.dim, "SpiritStones ") .. colRT(RT.text, tostring(cultProfile.ss or "?")))
+    table.insert(L, colRT(RT.dim, "Root ") .. colRT(RT.text, (cultProfile.root and fmtN(cultProfile.root) or "?"))
+        .. colRT(RT.dim, "  Const ") .. colRT(RT.text, (cultProfile.const and fmtN(cultProfile.const) or "?"))
+        .. colRT(RT.dim, "  Luck ") .. colRT(RT.text, (cultProfile.luck and fmtN(cultProfile.luck) or "?"))
+        .. colRT(RT.dim, "  Compr ") .. colRT(RT.text, (cultProfile.compr and fmtN(cultProfile.compr) or "?")))
+    table.insert(L, colRT(RT.dim, "Mastery  Forage ") .. colRT(RT.text, (cultProfile.mf and fmtN(cultProfile.mf) or "?"))
+        .. colRT(RT.dim, "  Alch ") .. colRT(RT.text, (cultProfile.ma and fmtN(cultProfile.ma) or "?"))
+        .. colRT(RT.dim, "  Weapon ") .. colRT(RT.text, (cultProfile.mw and fmtN(cultProfile.mw) or "?"))
+        .. colRT(RT.dim, "  Skill ") .. colRT(RT.text, (cultProfile.ms and fmtN(cultProfile.ms) or "?")))
+    table.insert(L, colRT(RT.dim, "SpiritStones ") .. colRT(RT.text, (cultProfile.ss and fmtN(cultProfile.ss) or "?")))
 
     cultRichLabel.Text = table.concat(L, "\n")
     pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
