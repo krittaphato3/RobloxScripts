@@ -625,6 +625,7 @@ dbg("harvest")
 local Harvest = {
 lastResult = {},
 collected = {},  -- tracks which instanceIds got finish_harvest (collected)
+counted = {},    -- instanceIds we already counted as a success (prevents double count)
 renewKeywords = {"too far","invalid token","renew","expired","token","bound","out of range","not in range"},
 }
 local function attachHarvestListeners()
@@ -718,7 +719,8 @@ local list = State.byType[id]; if not list then return nil end
 local best, bd = nil, 1e9
 for _, h in ipairs(list) do
 -- skip records whose model was harvested/despawned (stale until next scan)
-if h.model and h.model.Parent then
+-- AND skip herbs we already fired finish_harvest on (advance to next herb)
+if h.model and h.model.Parent and not Harvest.collected[h.instanceId] then
 local d = distTo(h)
 if d < bd then bd = d; best = h end
 end
@@ -731,7 +733,7 @@ local t = {}
 for id in pairs(State.selectedTypes) do
 if not isTypeLocked(id) and State.byType[id] then
 for _, h in ipairs(State.byType[id]) do
-if h.model and h.model.Parent then
+if h.model and h.model.Parent and not Harvest.collected[h.instanceId] then
 local d = distTo(h)
 t[#t+1] = { herb = h, d = d }
 end
@@ -771,7 +773,10 @@ for tries = 1, CONFIG.MaxRetries + 1 do
 if not State.running and not manual then return false end
 -- check if already collected by a previous finish_harvest event
 if Harvest.collected[h.instanceId] then
+if not Harvest.counted[h.instanceId] then
+Harvest.counted[h.instanceId] = true
 State.stats.harvested = State.stats.harvested + 1
+end
 if log then log("   already collected (ok)", "good") end
 task.wait(CONFIG.HarvestCooldown)
 return true
@@ -781,7 +786,10 @@ if not (h.model and h.model.Parent) then
 -- if we got a result, it was collected — count as ok
 local alreadyDone = Harvest.lastResult[h.instanceId]
 if alreadyDone and alreadyDone.ok == true then
+if not Harvest.counted[h.instanceId] then
+Harvest.counted[h.instanceId] = true
 State.stats.harvested = State.stats.harvested + 1
+end
 return true
 end
 -- herb gone but no result — silently skip (was likely collected by finish_harvest)
@@ -801,14 +809,19 @@ Harvest.collected[h.instanceId] = nil
 State.invalid = false
 local ok, how = firePair(h)
 local res = Harvest.lastResult[h.instanceId]
--- check if finish_harvest was received (collected)
-if Harvest.collected[h.instanceId] or (res and res.ok == true) then
+-- USER RULE: finish_harvest fired = this herb is DONE. Count 1 success and
+-- advance to the next herb IMMEDIATELY — never wait for a server ack that may
+-- not arrive (that wait is what wedged Sequence on the first herb). Only an
+-- explicit harvest_result ok=false within the wait window counts as a failure.
+if ok and not (res and res.ok == false) then
+Harvest.collected[h.instanceId] = true
+if not Harvest.counted[h.instanceId] then
+Harvest.counted[h.instanceId] = true
 State.stats.harvested = State.stats.harvested + 1
+end
 State.invalid = false
-local n = "1"
-if res and res.msg then n = tostring(res.msg):match("(%d+)x") or "1" end
-if toast then toast(("+%s %s"):format(n, h.id), "good") end
-if log   then log(("   ok (%sx)"):format(n), "good") end
+if toast then toast(("+1 %s"):format(h.id), "good") end
+if log   then log("   ok (finish_harvest fired)", "good") end
 task.wait(CONFIG.HarvestCooldown)
 return true
 end
@@ -1431,6 +1444,12 @@ end
 end
 local function reconcileList()
 if not listFrame then return end
+-- prune stale harvest marks: instanceIds that no longer exist in the live
+-- scan (harvested + despawned) can never be re-picked, so drop their marks
+-- to keep the collected/counted tables bounded across respawns
+for k in pairs(Harvest.collected) do if not State.byId[k] then Harvest.collected[k] = nil end end
+for k in pairs(Harvest.counted)   do if not State.byId[k] then Harvest.counted[k] = nil end end
+for k in pairs(Harvest.lastResult) do if not State.byId[k] then Harvest.lastResult[k] = nil end end
 local sorted = knownSorted()
 for i, id in ipairs(sorted) do
 if not rows[id] then rows[id] = herbCard(id) end
