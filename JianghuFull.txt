@@ -749,13 +749,35 @@ end
 --  "Nearest"  = current behavior — globally nearest herb among selected types
 --  "Sequence" = walk selected types in list order (alphabetical, same as the herb list);
 --               first type with live herbs wins; within it, always the nearest instance
+-- rotation cursor for Sequence mode: index (into the selected-type list) of
+-- the type we last picked — the next pick starts AFTER it, so each harvest
+-- advances to the next type in the sequence (round-robin, wrap-around)
+local seqCursor = 0
+
+-- strategy-aware target selection:
+--  "Nearest"  = globally nearest herb among selected types (ignore order)
+--  "Sequence" = round-robin across selected types in herb-list order:
+--               pick type A's nearest herb -> harvest 1 -> type B's nearest
+--               -> type C -> ... -> wrap back to A. Types with no live herbs
+--               are skipped. Within each type, always the nearest instance.
 local function pickHarvestTarget()
 if State.strategy == "Sequence" then
-local sorted = knownSorted()
-for _, id in ipairs(sorted) do
+-- ordered list of selected, unlocked types (same order as the herb list)
+local types = {}
+for _, id in ipairs(knownSorted()) do
 if State.selectedTypes[id] and not isTypeLocked(id) and State.byType[id] then
-local h = nearestInstanceOf(id)
-if h then return h end
+types[#types+1] = id
+end
+end
+if #types == 0 then return nil end
+-- rotate: start from the type AFTER the last one we picked (wrap-around)
+local start = (seqCursor % #types) + 1
+for step = 0, #types - 1 do
+local idx = ((start - 1 + step) % #types) + 1
+local h = nearestInstanceOf(types[idx])
+if h then
+seqCursor = idx  -- next pick advances to the following type
+return h
 end
 end
 return nil
