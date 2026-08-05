@@ -612,7 +612,8 @@ if _lastPath.Status == Enum.PathStatus.Success then
 for _, wp in ipairs(_lastPath:GetWaypoints()) do
 h:MoveTo(wp.Position)
 if wp.Action == Enum.PathWaypointAction.Jump then pcall(function() h.Jump = true end) end
-local done, conn = false, h.MoveToFinished:Connect(function() done = true end)
+local done = false
+local conn = h.MoveToFinished:Connect(function() done = true end)
 local deadline = os.clock() + 3
 while not done and os.clock() < deadline do task.wait(0.1) end
 conn:Disconnect()
@@ -2317,6 +2318,7 @@ _setBodyBtWithConfirm = function(v, toggleRef)
 	end
 	_bodyConfirmOverlay.Visible = true
 end
+local cultConn = nil
 local function buildWindow()
 guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
 IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
@@ -2715,7 +2717,6 @@ local function attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
 end
 
 -- subscribe to Cultivation.state_updated
-local cultConn = nil
 local _statsDirty = true  -- set by installCultState's state_updated handler; cleared by updateStatsPage
 local function installCultState()
 local folder = Replicated:FindFirstChild("Network")
@@ -3162,25 +3163,10 @@ end
 ------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
 local function armRejoin()
 local placeId = game.PlaceId
-local s = _fkFetch()
-if not s or not _fkOk(s) then return end
 local boot = string.format([==[
 repeat task.wait(1) until game:IsLoaded()
 if game.PlaceId ~= %d then return end
 task.wait(2)
-local s = %q
-if s then local f=loadstring(s); if f then pcall(f) end end
-]==], placeId, s)
-local q
-pcall(function() q = queue_on_teleport end)
-if not q then pcall(function() if syn then q = syn.queue_on_teleport end end) end
-if not q then pcall(function() q = queueonteleport end) end
-if q then
-local qok = pcall(q, boot)
-if not qok then
-local stub = string.format([==[
-repeat task.wait(1) until game:IsLoaded()
-if game.PlaceId ~= %d then return end
 local function _g(u)
 if request then local o,r=pcall(function() return request({Url=u,Method="GET"}) end) if o and r and r.Body then return r.Body end end
 if http_request then local o,r=pcall(function() return http_request({Url=u,Method="GET"}) end) if o and r and r.Body then return r.Body end end
@@ -3193,9 +3179,11 @@ if s and #s > 500 and #s < 350000 and s:find("ForageKit v", 1, true) then
 local f = loadstring(s); if f then pcall(f) end
 end
 ]==], placeId, FK_URL)
-pcall(q, stub)
-end
-end
+local q
+pcall(function() q = queue_on_teleport end)
+if not q then pcall(function() if syn then q = syn.queue_on_teleport end end) end
+if not q then pcall(function() q = queueonteleport end) end
+if q then pcall(q, boot) end
 end
 ------------------------------------------------------------------ wire forward hooks + boot
 dbg("boot")
