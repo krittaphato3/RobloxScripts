@@ -42,13 +42,10 @@ Foraging.finish_harvest( instanceId, token, true, vpX, vpY, depth )  x2
 --   loadstring(game:HttpGet("URL"))()
 ------------------------------------------------------------------
 local _fkDebug = (type(debug) == "boolean" and debug) or false
-pcall(function()
-  if _fkDebug then getgenv().ForageKit_Debug = true end
-end)
 local _fkFn = (function()
 local HttpService = game:GetService("HttpService")
 ------------------------------------------------------------------ debug helpers
-local DEBUG = (getgenv and getgenv().ForageKit_Debug) or false
+local DEBUG = _fkDebug
 local _dbgPhase = "init"
 local _dbgT0 = tick()
 local function dbg(phase)
@@ -97,6 +94,30 @@ local SaveFileName = "ForageKit_Settings.json"
 local VALID_MODES  = { Walk = true, Tween = true, Teleport = true, Adaptive = true }
 local VALID_STRATEGIES = { Nearest = true, Sequence = true }
 local FK_URL       = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/JianghuFull.txt"
+local function _fkFetch()
+if request then local o, r = pcall(function() return request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
+if http_request then local o, r = pcall(function() return http_request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
+if http and http.request then local o, r = pcall(function() return http.request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
+if syn and syn.request then local o, r = pcall(function() return syn.request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
+local o, b = pcall(function() return game:HttpGet(FK_URL) end)
+if o and b then return b end
+return nil
+end
+local FK_SHA256 = "ec1af467922edb1a8b1c0c0303b6c8c9b1a48ac784cf1dafcf5ef25ee3b3f9ea"
+local function _fkOk(body)
+if type(body) ~= "string" or #body < 500 or #body > 350000 then return false end
+if not body:find("ForageKit v", 1, true) then return false end
+local bodyClean = body:gsub('local FK_SHA256 = "[0-9a-fA-F]+"', 'local FK_SHA256 = nil')
+local digest
+pcall(function()
+if crypt and crypt.hash and crypt.hash.sha256 then digest = crypt.hash.sha256(bodyClean)
+elseif syn and syn.crypt and syn.crypt.hash then digest = syn.crypt.hash("sha256", bodyClean)
+elseif sha256 then digest = sha256(bodyClean) end
+end)
+if FK_SHA256 and digest then return digest:lower() == FK_SHA256:lower() end
+if FK_SHA256 and not digest then return false end
+return true
+end
 ------------------------------------------------------------------ design tokens: palette
 local J = {
 ink       = Color3.fromRGB(10,10,15),      -- #0A0A0F  window base
@@ -231,13 +252,18 @@ AutoBtMinChance   = autoBt.minChance,
 pcall(function() writefile(SaveFileName, HttpService:JSONEncode(data)) end)
 end)
 end
+local function num(v, def, lo, hi)
+if type(v) ~= "number" or v ~= v or v == math.huge or v == -math.huge then return def end
+if lo and hi then return math.clamp(v, lo, hi) end
+return v
+end
 local function loadSettings()
 if not readfile or not isfile or not isfile(SaveFileName) then return end
 local data
 pcall(function() data = HttpService:JSONDecode(readfile(SaveFileName)) end)
 if type(data) ~= "table" then return end
-if type(data.WalkSpeed) == "number" then CONFIG.WalkSpeed = data.WalkSpeed end
-if type(data.Dwell)     == "number" then CONFIG.Dwell     = data.Dwell end
+CONFIG.WalkSpeed = num(data.WalkSpeed, CONFIG.WalkSpeed, 8, 40)
+CONFIG.Dwell     = num(data.Dwell,     CONFIG.Dwell,     0.2, 10)
 if type(data.Mode) == "string" and VALID_MODES[data.Mode] then State.mode = data.Mode end
 if type(data.HarvestStrategy) == "string" and VALID_STRATEGIES[data.HarvestStrategy] then State.strategy = data.HarvestStrategy end
 if type(data.AutoStart) == "boolean" then CONFIG.AutoStart = data.AutoStart end
@@ -249,11 +275,13 @@ end
 if type(data.SelectedTypes) == "table" then State.selectedTypes = data.SelectedTypes end
 if type(data.ShowToasts) == "boolean" then CONFIG.ShowToasts = data.ShowToasts end
 if type(data.WindowSize) == "table" then
-if type(data.WindowSize.X) == "number" then CONFIG.WindowSize = Vector2.new(data.WindowSize.X, data.WindowSize.Y) end
+local wx = num(data.WindowSize.X, nil, 640, 1600)
+local wy = num(data.WindowSize.Y, nil, 400, 1000)
+if wx and wy then CONFIG.WindowSize = Vector2.new(wx, wy) end
 end
 if type(data.AutoBtEnabled) == "boolean" then autoBt.enabled = data.AutoBtEnabled end
 if type(data.AutoBtBodyEnabled) == "boolean" then autoBt.bodyEnabled = data.AutoBtBodyEnabled end
-if type(data.AutoBtMinChance) == "number" then autoBt.minChance = data.AutoBtMinChance end
+autoBt.minChance = num(data.AutoBtMinChance, autoBt.minChance, 0, 100)
 end
 local function persistAutoStart(on)
 CONFIG.AutoStart = on and true or false
@@ -270,6 +298,7 @@ local activeToasts = {}
 ------------------------------------------------------------------ tab switching state
 local activeTab = "Stats"
 local preSettingsTab = nil  -- save tab before settings opened
+local minimized = false  -- window minimized flag (read by page animation loops)
 local tabPages = {}       -- tab name -> { contentFrame, sidebarFrame }
 local tabButtons = {}     -- tab name -> TextButton
 local tabIndicator = nil  -- jade underline
@@ -294,7 +323,7 @@ model      = model, root = root, prompt = prompt,
 id         = hid, region = attrs.RegionId or "?",
 instanceId = attrs.HerbInstanceId or model.Name,
 token      = attrs.HarvestToken,
-hold       = tonumber(attrs.HoldDuration) or 1.75,
+hold       = math.clamp(tonumber(attrs.HoldDuration) or 1.75, 0.1, 5),
 pos        = function()
 if not root or not root.Parent then return nil end
 local ok, p = pcall(function() return root.Position end)
@@ -368,11 +397,10 @@ while #stack > 0 do
 local node = table.remove(stack)
 counter[1] = counter[1] + 1
 if counter[1] > cap then return true end
-pcall(function()
-if node:GetAttribute(CONFIG.HerbAttr) then ingest(node, found, list) end
-end)
-local ok, children = pcall(function() return node:GetChildren() end)
-if ok and children then
+local okN, isHerb = pcall(node.GetAttribute, node, CONFIG.HerbAttr)
+if okN and isHerb then ingest(node, found, list) end
+local okC, children = pcall(node.GetChildren, node)
+if okC and children then
 for _, child in ipairs(children) do
 stack[#stack + 1] = child
 end
@@ -387,6 +415,7 @@ for model, rec in pairs(tracked) do
 if not model.Parent then detachRecord(rec); tracked[model] = nil end
 end
 end
+local _pickCache = nil
 local function finalizeScan(list, nodes, verbose, capped)
 local byType = {}
 for _, rec in ipairs(list) do
@@ -394,6 +423,20 @@ byType[rec.id] = byType[rec.id] or {}
 byType[rec.id][#byType[rec.id]+1] = rec
 end
 State.herbs, State.byType = list, byType
+State.nearestByType = {}
+local rp = hrp() and hrp().Position
+for id, lst in pairs(byType) do
+local best, bd = nil, 1e18
+for _, rec in ipairs(lst) do
+local hp = rec.pos()
+if hp then
+local d = rp and ((hp.X - rp.X) * (hp.X - rp.X) + (hp.Z - rp.Z) * (hp.Z - rp.Z)) or 1e18
+if d < bd then bd = d; best = rec end
+end
+end
+State.nearestByType[id] = best
+end
+_pickCache = nil
 State.byId = {}
 for _, rec in ipairs(list) do
 State.byId[rec.instanceId] = rec
@@ -416,14 +459,15 @@ State._prevCount = #list
 if log then log("scan: " .. nodes .. " nodes" .. (capped and " (cap)" or "") .. ", " .. #list .. " herbs", #list > 0 and "good" or "info") end
 end
 end
-local function fullScan(verbose)
+local _scanBusy = false
+local function fullScanInner(verbose)
 setScanning(true)
 gcTracked()
 local found, list, counter = {}, {}, {}; counter[1] = 0
 local roots = priorityRoots()
 local capped = false
 for _, root in ipairs(roots) do
-if walkScan(root, CONFIG.NodeCap, found, list, counter) then capped = true; break end
+if walkScan(root, CONFIG.NodeCap - counter[1], found, list, counter) then capped = true; break end
 end
 if not capped then
 for _, c in ipairs(Workspace:GetChildren()) do
@@ -437,9 +481,17 @@ end
 end
 end
 finalizeScan(list, counter[1], verbose, capped)
+end
+local function fullScan(verbose)
+if _scanBusy then return end
+_scanBusy = true
+local ok, err = pcall(function() fullScanInner(verbose == true) end)
+_scanBusy = false
 setScanning(false)
+if not ok then if log then log("scan error: " .. tostring(err), "bad") end end
 end
 local function quickScan()
+if _scanBusy then return end
 local found, list, counter = {}, {}, {}; counter[1] = 0
 for _, root in ipairs(priorityRoots()) do
 if walkScan(root, 40000, found, list, counter) then break end
@@ -448,10 +500,33 @@ finalizeScan(list, counter[1], false, false)
 end
 function Scanner.refresh(verbose) pcall(function() fullScan(verbose == true) end) end
 local _debounce = false
+local _pending = {}
 local function watchSpawn(d)
-if _debounce then return end
+if _debounce then _pending[#_pending + 1] = d; return end
 _debounce = true
-task.delay(0.4, function() _debounce = false; if alive then quickScan() end end)
+task.delay(0.4, function()
+_debounce = false
+if not alive then _pending = {}; return end
+local found, list, counter = {}, {}, {}; counter[1] = 0
+pcall(function()
+for _, s in ipairs(_pending) do
+if s and s.Parent and not found[s] then
+walkScan(s, 4000, found, list, counter)
+end
+end
+end)
+_pending = {}
+if #list == 0 then return end
+-- merge spawned herbs into live state (no wholesale clobber)
+local merged, seen = {}, {}
+for _, rec in ipairs(State.herbs) do
+if rec.instanceId and not seen[rec.instanceId] then seen[rec.instanceId] = true; merged[#merged + 1] = rec end
+end
+for _, rec in ipairs(list) do
+if rec.instanceId and not seen[rec.instanceId] then seen[rec.instanceId] = true; merged[#merged + 1] = rec end
+end
+finalizeScan(merged, counter[1], false, false)
+end)
 end
 function Scanner.startIncremental()
 for _, r in ipairs(priorityRoots()) do
@@ -537,7 +612,11 @@ if _lastPath.Status == Enum.PathStatus.Success then
 for _, wp in ipairs(_lastPath:GetWaypoints()) do
 h:MoveTo(wp.Position)
 if wp.Action == Enum.PathWaypointAction.Jump then pcall(function() h.Jump = true end) end
-if not h.MoveToFinished:Wait() then break end
+local done, conn = false, h.MoveToFinished:Connect(function() done = true end)
+local deadline = os.clock() + 3
+while not done and os.clock() < deadline do task.wait(0.1) end
+conn:Disconnect()
+if not done then break end
 end
 else
 h:MoveTo(target); task.wait(0.6)
@@ -626,6 +705,7 @@ local Harvest = {
 lastResult = {},
 collected = {},  -- tracks which instanceIds got finish_harvest (collected)
 counted = {},    -- instanceIds we already counted as a success (prevents double count)
+failAt = {},     -- instanceIds that just failed (retry cooldown, pruned after 30s)
 renewKeywords = {"too far","invalid token","renew","expired","token","bound","out of range","not in range"},
 }
 local function attachHarvestListeners()
@@ -686,6 +766,12 @@ return nx, ny, depth
 end
 local function firePair(h)
 RunService.RenderStepped:Wait()  -- one frame sync for camera
+local okA, attrs = pcall(function() return h.model:GetAttributes() end)
+if okA and attrs then
+h.token = attrs.HarvestToken
+h.instanceId = attrs.HerbInstanceId or h.instanceId
+h.hold = math.clamp(tonumber(attrs.HoldDuration) or h.hold, 0.1, 5)
+end
 local sx, sy, sz = viewportArgs(h.root)
 -- reuse same viewport args (player isn't moving during harvest)
 if not fireServer("Foraging","start_harvest", h.instanceId, h.token, true, sx, sy, sz) then
@@ -721,28 +807,49 @@ for _, h in ipairs(list) do
 -- skip records whose model was harvested/despawned (stale until next scan)
 -- AND skip herbs we already fired finish_harvest on (advance to next herb)
 if h.model and h.model.Parent and not Harvest.collected[h.instanceId] then
+local fa = Harvest.failAt[h.instanceId]
+if not (fa and (os.clock() - fa) < 10) then
 local d = distTo(h)
 if d < bd then bd = d; best = h end
+end
 end
 end
 return best
 end
 -- returns ALL herbs from selected types, sorted by distance to player (nearest first)
 local function selectedHerbsSorted()
+local r = hrp(); local p = r and r.Position
+if _pickCache and _pickCache.at and p and (_pickCache.at - p).Magnitude <= 2 then
+local out, t = {}, _pickCache.list
+for i = #t, 1, -1 do
+local h = t[i]
+local fa = Harvest.failAt[h.instanceId]
+if h.model and h.model.Parent and not Harvest.collected[h.instanceId]
+and not (fa and (os.clock() - fa) < 10) then
+out[#out + 1] = h
+end
+end
+return out
+end
 local t = {}
 for id in pairs(State.selectedTypes) do
-if not isTypeLocked(id) and State.byType[id] then
-for _, h in ipairs(State.byType[id]) do
+if not isTypeLocked(id) then
+for _, h in ipairs(State.byType[id] or {}) do
 if h.model and h.model.Parent and not Harvest.collected[h.instanceId] then
-local d = distTo(h)
-t[#t+1] = { herb = h, d = d }
+local fa = Harvest.failAt[h.instanceId]
+if not (fa and (os.clock() - fa) < 10) then
+local hp = h.pos()
+local d = hp and p and ((p.X - hp.X)*(p.X - hp.X) + (p.Z - hp.Z)*(p.Z - hp.Z)) or 1e18
+t[#t + 1] = { h = h, d = d }
+end
 end
 end
 end
 end
 table.sort(t, function(a, b) return a.d < b.d end)
 local out = {}
-for i, v in ipairs(t) do out[i] = v.herb end
+for i = 1, #t do out[i] = t[i].h end
+_pickCache = { list = out, at = p }
 return out
 end
 -- strategy-aware target selection:
@@ -853,6 +960,7 @@ local m = tostring(res.msg)
 if log then log(("   server: %s"):format(m), "warn") end
 -- mastery lock = can't harvest this type
 if m:lower():find("mastery", 1, true) then
+Harvest.failAt[h.instanceId] = os.clock()
 return false
 end
 -- invalid movement = anti-cheat, just re-fire (don't count as fail)
@@ -875,14 +983,17 @@ end
 task.wait(0.25)
 end
 end
+Harvest.failAt[h.instanceId] = os.clock()
 return false
 end
 -- automation-specific connections (killed instantly on stop)
 local _autoBag = {}
+local autoGen = 0
 local function trackAuto(c) if c then _autoBag[#_autoBag+1] = c end; return c end
 local function killAuto()
 State.running = false
-for _, c in ipairs(_autoBag) do pcall(function() c:Disconnect() end) end
+autoGen = autoGen + 1
+for _, t in ipairs(_autoBag) do pcall(task.cancel, t) end
 _autoBag = {}
 end
 local function startAuto()
@@ -901,13 +1012,14 @@ if toast then toast("select a herb type first", "warn") end
 if log   then log("no herb types selected", "warn") end
 return
 end
+local gen = autoGen + 1; autoGen = gen
 State.running = true
 persistAutoStart(true)
 saveSettings()
 if toast then toast("automation started", "good") end
 if log   then log("automation START  mode=" .. State.mode .. "  strategy=" .. State.strategy, "good") end
 trackAuto(task.spawn(function()
-while alive and State.running do
+while alive and State.running and gen == autoGen do
 -- pcall the whole iteration so a single bad herb record (destroyed model,
 -- nil pos, remote error) can NEVER kill the loop silently and wedge
 -- State.running = true — the "Start auto does nothing" bug
@@ -946,13 +1058,16 @@ elseif itErr == "stop" then
 break
 end
 end
+if gen == autoGen then
 State.running = false
 if updateStatus then updateStatus() end
 if toast then toast("automation stopped", "info") end
 if log   then log("automation STOP", "info") end
+end
 end))
 end
 local function stopAuto()
+autoGen = autoGen + 1
 killAuto()
 persistAutoStart(false)
 saveSettings()
@@ -1119,7 +1234,7 @@ Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0),
 TextXAlignment = Enum.TextXAlignment.Center}, badge)
 -- pulsing ring animation
 track(task.spawn(function()
-while alive and ring.Parent do
+while alive and ring.Parent and main.frame and main.frame.Visible and not minimized do
 pcall(function() TweenSvc:Create(ring, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
 {Size = UDim2.new(0,88,0,88), BackgroundTransparency = 0.15}):Play() end)
 task.wait(2.4)
@@ -1232,6 +1347,7 @@ end
 local capturing = nil
 local function stopCapture(cancel)
 if not capturing then return end
+if capturing.timer then pcall(task.cancel, capturing.timer); capturing.timer = nil end
 if capturing.pulse then pcall(function() capturing.pulse:Cancel() end) end
 if not cancel and capturing.button then capturing.button.Text = keyName(Binds[capturing.action]) end
 if capturing.button then
@@ -1247,6 +1363,7 @@ button.Text = "press a key"; button.TextColor3 = J.gold
 pcall(function() button.UIStroke.Color = J.gold end)
 local tw = TweenSvc:Create(button, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, true), {BackgroundTransparency = 0.35})
 capturing.pulse = tw
+capturing.timer = task.delay(6, function() stopCapture(true) end)
 pcall(function() tw:Play() end)
 end
 ------------------------------------------------------------------ log (pooled, max 50 rows)
@@ -1289,7 +1406,10 @@ pcall(function() TweenSvc:Create(ts,   TweenInfo.new(0.25), {TextTransparency = 
 pcall(function() TweenSvc:Create(body, TweenInfo.new(0.25), {TextTransparency = 0}):Play() end)
 if logRowCount > LOG_MAX then
 -- recycle oldest: move to pool instead of destroying
-local oldest = gui.logLayout:GetChildren()[1]
+local oldest
+for _, k in ipairs(gui.logFrame:GetChildren()) do
+if k:IsA("Frame") then oldest = k break end
+end
 if oldest and oldest:IsA("Frame") then
 oldest.Parent = nil
 logRowCount = logRowCount - 1
@@ -1301,15 +1421,18 @@ end
 local function clearLog()
 if not gui.logFrame then return end
 for _, k in ipairs(gui.logFrame:GetChildren()) do if k:IsA("Frame") then k:Destroy() end end
+logRowCount = 0
+logPool = {}
 end
 ------------------------------------------------------------------ status bar + header chip
 local function guiUpdateStatus()
 if not gui.statMode then return end
 -- count only selected types that still have LIVE rows (stale persisted selections excluded)
+local sorted = knownSorted()
 local sel = 0
-for _, id in ipairs(knownSorted()) do if State.selectedTypes[id] then sel = sel + 1 end end
+for _, id in ipairs(sorted) do if State.selectedTypes[id] then sel = sel + 1 end end
 gui.statMode.Text  = State.mode .. (State.strategy == "Sequence" and " · SEQ" or " · NEAR")
-gui.statTypes.Text = ("types %d/%d"):format(sel, #knownSorted())
+gui.statTypes.Text = ("types %d/%d"):format(sel, #sorted)
 gui.statOk.Text    = ("harvested %d"):format(State.stats.harvested)
 gui.statOk.TextColor3   = State.stats.harvested > 0 and J.jade or J.silver
 gui.statForage.Text = ("forage L%d"):format(foragingLevel())
@@ -1334,6 +1457,7 @@ end
 end
 end
 ------------------------------------------------------------------ herb cards
+local _goBusy = false
 local function herbCard(typeId)
 local locked = isTypeLocked(typeId)
 local card = mk("Frame", {Size = UDim2.new(1,0,0,56), BackgroundColor3 = J.charcoal, BorderSizePixel = 0, BackgroundTransparency = 1}, listFrame)
@@ -1398,12 +1522,17 @@ onClick = function()
 if locked then return end
 local h = nearestInstanceOf(typeId)
 if not h then if toast then toast("no live " .. typeId, "warn") end; return end
+if _goBusy then return end
 if toast then toast("go -> " .. typeId, "info") end
+_goBusy = true
 task.spawn(function()
 -- manual = true: GO works standalone (doesn't require State.running)
+pcall(function()
 local done = tryHarvest(h, false, true)
 if not done then done = tryHarvest(h, true, true) end
 if not done and log then log("   gave up on " .. typeId, "bad") end
+end)
+_goBusy = false
 end)
 end})
 go.ZIndex = 2
@@ -1472,13 +1601,27 @@ if not listFrame then return end
 for k in pairs(Harvest.collected) do if not State.byId[k] then Harvest.collected[k] = nil end end
 for k in pairs(Harvest.counted)   do if not State.byId[k] then Harvest.counted[k] = nil end end
 for k in pairs(Harvest.lastResult) do if not State.byId[k] then Harvest.lastResult[k] = nil end end
+for k in pairs(Harvest.failAt) do
+if not State.byId[k] then Harvest.failAt[k] = nil
+elseif Harvest.failAt[k] and os.clock() - Harvest.failAt[k] > 30 then Harvest.failAt[k] = nil
+end
+end
+local seen = {}
 local sorted = knownSorted()
 for i, id in ipairs(sorted) do
+seen[id] = true
 if not rows[id] then rows[id] = herbCard(id) end
 rows[id].frame.LayoutOrder = i
 rows[id].refreshLocked()
 -- always repaint to sync visual with selection state
 rows[id].paintSel()
+end
+-- destroy cards for herb types that vanished from the scan (keeps rows bounded)
+for id, r in pairs(rows) do
+if not seen[id] then
+pcall(function() r.frame:Destroy() end)
+rows[id] = nil
+end
 end
 setEmptyState(#sorted == 0)
 guiUpdateStatus()
@@ -1524,7 +1667,6 @@ if toast then toast("selected nearest types", "info") end
 saveSettings()
 end
 ------------------------------------------------------------------ window visibility / minimize
-local minimized = false
 local function setVisible(v)
 if not main.frame then return end
 if v then
@@ -1732,24 +1874,24 @@ local updateBtn = mkButton(scroll, {text = "Update Script from GitHub", size = U
 onClick = function()
 if toast then toast("fetching latest version...", "info") end
 task.spawn(function()
-local ok, result = pcall(function()
-if request then return request({Url = FK_URL, Method = "GET"}) end
-if http_request then return http_request({Url = FK_URL, Method = "GET"}) end
-if http and http.request then return http.request({Url = FK_URL, Method = "GET"}) end
-if syn and syn.request then return syn.request({Url = FK_URL, Method = "GET"}) end
-return game:HttpGet(FK_URL)
-end)
-if ok and result and result.Body then
-if writefile then
-pcall(function() writefile("ForageKit_Loader.lua", result.Body) end)
-end
-if loadstring then
-local fn = loadstring(result.Body)
-if fn then fn() end
-end
+local body = _fkFetch()
+if not body then
+if toast then toast("update failed: could not fetch", "bad") end
+elseif _fkOk(body) then
+local fn = loadstring(body)
+if fn then
+local okRun = pcall(fn)
+if okRun then
+if writefile then pcall(function() writefile("ForageKit_Loader.lua", body) end) end
 if toast then toast("updated! script reloaded", "good") end
 else
-if toast then toast("update failed: " .. tostring(result), "bad") end
+if toast then toast("update error: " .. tostring(okRun), "bad") end
+end
+else
+if toast then toast("update rejected: script failed to compile", "bad") end
+end
+else
+if toast then toast("update rejected: payload failed integrity check", "bad") end
 end
 end)
 end})
@@ -1793,6 +1935,10 @@ gui.settingsPanel.BackgroundTransparency = 0
 -- restore the tab we were on before settings
 if preSettingsTab and tabPages[preSettingsTab] then
 switchTab(preSettingsTab)
+if preSettingsTab == "Harvesting" then
+if listFrame then listFrame.Visible = true end
+if emptyState and #knownSorted() == 0 then emptyState.Visible = true end
+end
 else
 if harvestSidebar then harvestSidebar.Visible = true end
 if harvestContent then harvestContent.Visible = true end
@@ -1997,13 +2143,13 @@ local sweepPivot = mk("Frame", {Size = UDim2.new(0,0,0,0), AnchorPoint = Vector2
 local sweep = mk("Frame", {Size = UDim2.new(0,2,0,41), AnchorPoint = Vector2.new(0.5,1), Position = UDim2.new(0.5,0,0.5,0), BackgroundColor3 = J.gold, BackgroundTransparency = 0.2, BorderSizePixel = 0}, sweepPivot)
 grad(sweep, J.gold, J.gold, 0, NumberSequence.new({NumberSequenceKeypoint.new(0,0.1), NumberSequenceKeypoint.new(1,0.9)}))
 track(task.spawn(function()
-while alive do
+while alive and main.frame and main.frame.Visible and not minimized do
 pcall(function() TweenSvc:Create(sweepPivot, TweenInfo.new(2.6, Enum.EasingStyle.Linear, Enum.EasingDirection.In, 0), {Rotation = 360}):Play() end)
 task.wait(2.6)
 end
 end))
 track(task.spawn(function()
-while alive do
+while alive and main.frame and main.frame.Visible and not minimized do
 for i, ring in ipairs(radarRings) do
 task.delay(i * 0.4, function()
 if not ring.Parent then return end
@@ -2054,6 +2200,12 @@ autoBt = {
 }
 local updateStatsPage = nil  -- forward declaration, assigned inside buildWindow
 -- ─── AUTO-BREAKTHROUGH ENGINE (IIFE body level — accessible everywhere) ───
+local function pct(x) local n = x or 0; if n ~= n then return "--" end return ("%.1f%%"):format(n * 100) end
+local function esc(t)
+local s = tostring(t)
+s = s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+return s
+end
 local function doBreakthrough(path)
 local folder = Replicated:FindFirstChild("Network")
 if not folder then autoBt.feedback = "no network"; return end
@@ -2068,7 +2220,7 @@ autoBt.awaitPath = path
 autoBt.awaitStage = (cultState and cultState[path] and cultState[path].Stage) or "?"
 autoBt.flashUntil = tick() + 1.2
 local chNow = (cultState and cultState[path] and cultState[path].BreakthroughChance) or 0
-autoBt.feedback = "fired " .. path .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
+autoBt.feedback = "fired " .. esc(path) .. " @ " .. pct(chNow) .. " · cooldown " .. AUTOBT_COOLDOWN .. "s"
 end
 -- ─── BODY AUTO-BT CONFIRM HELPERS (used by Settings Cultivation section) ───
 -- _tweenToggleKnob: visually sync the toggleSwitch knob/track to a target state
@@ -2191,13 +2343,13 @@ local ambient = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency =
 local glowA = mk("Frame", {Size = UDim2.new(0,320,0,320), Position = UDim2.new(0,-110,0,-130), BackgroundColor3 = J.jade, BackgroundTransparency = 0.965, BorderSizePixel = 0}, ambient); corner(glowA, 160)
 local glowB = mk("Frame", {Size = UDim2.new(0,300,0,300), Position = UDim2.new(1,-150,1,-150), BackgroundColor3 = J.gold, BackgroundTransparency = 0.975, BorderSizePixel = 0}, ambient); corner(glowB, 150)
 track(task.spawn(function()
-while alive do
+while alive and main.frame and main.frame.Visible and not minimized do
 pcall(function() TweenSvc:Create(glowA, TweenInfo.new(7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.945, Position = UDim2.new(0,-90,0,-110)}):Play() end); task.wait(7)
 pcall(function() TweenSvc:Create(glowA, TweenInfo.new(7, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.97, Position = UDim2.new(0,-120,0,-140)}):Play() end); task.wait(7)
 end
 end))
 track(task.spawn(function()
-while alive do
+while alive and main.frame and main.frame.Visible and not minimized do
 pcall(function() TweenSvc:Create(glowB, TweenInfo.new(8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.955, Position = UDim2.new(1,-130,1,-130)}):Play() end); task.wait(8)
 pcall(function() TweenSvc:Create(glowB, TweenInfo.new(8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.98, Position = UDim2.new(1,-160,1,-160)}):Play() end); task.wait(8)
 end
@@ -2376,6 +2528,7 @@ if t == "" or t:lower() == "none" then return nil end
 return t
 end
 local function addCommas(n)
+if type(n) == "number" and math.abs(n) >= 1e15 then return tostring(n) end
 local s = string.format("%d", math.floor(n + 0.5))
 local rev = s:reverse():gsub("(%d%d%d)", "%1,"):gsub(",$", "")
 return rev:reverse()
@@ -2395,7 +2548,7 @@ if type(n) ~= "number" or n ~= n then return "—" end
 return fmtN(n) .. "/s"
 end
 local function fmtT(s)
-if s == nil or s ~= s then return "—" end
+if s == nil or s ~= s or math.abs(s) > 1e15 then return "—" end
 if s <= 0 then return "0s" end
 local d  = math.floor(s / 86400)
 local h  = math.floor((s % 86400) / 3600)
@@ -2406,7 +2559,6 @@ if h > 0 then return string.format("%dh %dm %ds", h, m, sc) end
 if m > 0 then return string.format("%dm %ds", m, sc) end
 return string.format("%ds", sc)
 end
-local function pct(x) return ("%.1f%%"):format((x or 0) * 100) end
 
 -- ═══ RICH TEXT HELPERS ═══
 local RT = {
@@ -2509,7 +2661,7 @@ end
 local function vertexInfo(fit)
     if not (fit and fit.quad) then return nil end
     local a,b,c = fit.quad[1], fit.quad[2], fit.quad[3]
-    if math.abs(c) < 1e-12 then return nil end
+    if math.abs(c) <= 1e-7 then return nil end
     local rv = -b/(2*c)
     return { r = rv, ch = math.min(1, math.max(0, a+b*rv+c*rv*rv)), concave = c < 0 }
 end
@@ -2564,6 +2716,7 @@ end
 
 -- subscribe to Cultivation.state_updated
 local cultConn = nil
+local _statsDirty = true  -- set by installCultState's state_updated handler; cleared by updateStatsPage
 local function installCultState()
 local folder = Replicated:FindFirstChild("Network")
 if not folder then return false end
@@ -2572,6 +2725,7 @@ if not cultFolder then return false end
 local remote = cultFolder:FindFirstChild("state_updated")
 if not (remote and remote:IsA("RemoteEvent")) then return false end
 cultConn = remote.OnClientEvent:Connect(function(payload)
+pcall(function()
 if type(payload) ~= "table" then return end
 if _fkDebug and not cultState then print("[Jianghu] first state_updated received!") end
 local realNow = normPath(payload.ActivePath) or normPath(payload.GainPath)
@@ -2581,12 +2735,12 @@ or (payload[cultActive] and cultActive)
 or (payload.Qi and "Qi") or (payload.Body and "Body") or cultActive
 cultActive = active
 local node = payload[active]
-if not node then cultState = payload; return end
-local cur = node.Current or 0
-local cost = node.BreakthroughCost or 0
-local ch = node.BreakthroughChance or 0
+if not node then cultState = payload; _statsDirty = true; return end
+local cur = tonumber(node.Current) or 0
+local cost = tonumber(node.BreakthroughCost) or 0
+local ch = tonumber(node.BreakthroughChance)
 local now = tick()
-if active ~= cultLastPath or (cost and cultLastCost and math.abs(cost - cultLastCost) > 1) then
+if active ~= cultLastPath or (cost and cultLastCost and cost == cost and cultLastCost == cultLastCost and math.abs(cost - cultLastCost) > 1) then
 cultSamples = {}; cultLastPath = active; cultLastCost = cost; cultLastPushedCur = nil
 cultObs.rate, cultObs.cslope = nil, nil
 cultObsLastT, cultObsLastCur, cultObsLastCh = nil, nil, nil
@@ -2615,6 +2769,8 @@ end
 end
 cultObsLastT, cultObsLastCur, cultObsLastCh = now, cur, ch
 cultState = payload
+_statsDirty = true
+end)
 end)
 return true
 end
@@ -2679,6 +2835,7 @@ end)
 -- ─── STATS UPDATE FUNCTION (RichText) ───
 local statsStartTime = os.clock()
 updateStatsPage = function()
+    if not _statsDirty then return end
     if not cultRichLabel then return end
 
     if not cultState then
@@ -2749,8 +2906,8 @@ updateStatsPage = function()
     else
         stateWord = colRT(RT.warm, "IDLE")
     end
-    table.insert(L, heroSmRT(accent, active:upper() .. " PATH") .. "   " .. stateWord
-        .. "   " .. colRT(RT.dim, "tick=" .. tostring(cultState.TickMode or "?")))
+    table.insert(L, heroSmRT(accent, esc(active:upper() .. " PATH")) .. "   " .. stateWord
+        .. "   " .. colRT(RT.dim, "tick=" .. esc(cultState.TickMode or "?")))
 
     -- STAGE
     local prefix, tailVal = parseStage(node.Stage)
@@ -2758,13 +2915,13 @@ updateStatsPage = function()
     local major = node.Major or 0
     local nextLabel
     if minor < 10 and prefix and prefix ~= "" then
-        nextLabel = colRT(RT.dim, prefix .. " " .. (ROMAN[minor+1] or tostring(minor+1)))
+        nextLabel = colRT(RT.dim, esc(prefix) .. " " .. (ROMAN[minor+1] or tostring(minor+1)))
     elseif minor >= 10 then
         nextLabel = colRT(RT.warm, "Major " .. (major+1) .. " \194\183 Minor 1  (new tier name not broadcast)")
     else
         nextLabel = colRT(RT.dim, "Major " .. major .. " \194\183 Minor " .. (minor+1))
     end
-    table.insert(L, labelRT("REALM") .. "  " .. heroRT(accent, node.Stage or "?")
+    table.insert(L, labelRT("REALM") .. "  " .. heroRT(accent, esc(node.Stage or "?"))
         .. "   " .. colRT(RT.dim, "M" .. major .. "\194\183m" .. minor) .. "  \226\134\146  " .. nextLabel)
 
     -- ESSENCE
@@ -2829,16 +2986,16 @@ updateStatsPage = function()
     end
 
     if node.BreakthroughWarning and node.BreakthroughWarning ~= "" then
-        table.insert(L, colRT(RT.warm, "\226\154\160 " .. node.BreakthroughWarning))
+        table.insert(L, colRT(RT.warm, "\226\154\160 " .. esc(node.BreakthroughWarning)))
     end
     local lock = cultState.RealmLocks and cultState.RealmLocks[active]
-    if lock then table.insert(L, colRT(RT.crimson, "REALM LOCKED (" .. active .. ")")) end
+    if lock then table.insert(L, colRT(RT.crimson, "REALM LOCKED (" .. esc(active) .. ")")) end
 
     -- AUTO-BT FEEDBACK (live)
     if autoBt.awaiting and cultState and autoBt.awaitPath then
         local n = cultState[autoBt.awaitPath]
         if n and n.Stage and n.Stage ~= autoBt.awaitStage then
-            autoBt.feedback = "\226\156\147 REALM UP \226\134\146 " .. tostring(n.Stage)
+            autoBt.feedback = "\226\156\147 REALM UP \226\134\146 " .. esc(n.Stage)
             autoBt.flashUntil = tick() + 2.0
             autoBt.awaiting = false
         elseif (tick() - autoBt.lastFire) > 8 then
@@ -2856,7 +3013,7 @@ updateStatsPage = function()
 
     -- TECHNIQUES
     table.insert(L, "")
-    table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \195\151" .. tostring(node.TechniqueMultiplier)))
+    table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \195\151" .. esc(node.TechniqueMultiplier)))
     local techs = cultState.Techniques
     if type(techs) == "table" then
         local keys = {}
@@ -2869,8 +3026,8 @@ updateStatsPage = function()
                 local isActive = (t.path == active and t.affects_growth and t.multiplier == node.TechniqueMultiplier)
                 local mark = isActive and colRT(RT.jade, "  \226\151\132 equipped") or ""
                 local pcol = (t.path == "Qi") and RT.cyan or RT.warm
-                table.insert(L, "   \226\128\162 " .. colRT(RT.text, tostring(t.name or "?"))
-                    .. "  " .. colRT(pcol, "\195\151" .. tostring(t.multiplier or "?"))
+                table.insert(L, "   \226\128\162 " .. colRT(RT.text, esc(t.name or "?"))
+                    .. "  " .. colRT(pcol, "\195\151" .. esc(t.multiplier or "?"))
                     .. "  " .. colRT(RT.dim, "[" .. flags .. "]") .. mark)
             end
         end
@@ -2908,7 +3065,7 @@ updateStatsPage = function()
         end
     end
     table.insert(L, colRT(RT.dim, "\226\150\185 " .. oth:upper()) .. "  "
-        .. colRT(oAcc, oNode and (oNode.Stage or "?") or "?")
+        .. colRT(oAcc, oNode and esc(oNode.Stage or "?") or "?")
         .. "  " .. colRT(RT.dim, "chance ") .. colRT(RT.text, oNode and pct(oNode.BreakthroughChance) or "\226\128\148")
         .. "   " .. table.concat(oParts, "  "))
 
@@ -2946,6 +3103,7 @@ updateStatsPage = function()
             end
         end
     end
+    _statsDirty = false
 end -- updateStatsPage
 
 -- install cultivation state listener (now called inside buildWindow)
@@ -3004,10 +3162,25 @@ end
 ------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
 local function armRejoin()
 local placeId = game.PlaceId
+local s = _fkFetch()
+if not s or not _fkOk(s) then return end
 local boot = string.format([==[
 repeat task.wait(1) until game:IsLoaded()
 if game.PlaceId ~= %d then return end
 task.wait(2)
+local s = %q
+if s then local f=loadstring(s); if f then pcall(f) end end
+]==], placeId, s)
+local q
+pcall(function() q = queue_on_teleport end)
+if not q then pcall(function() if syn then q = syn.queue_on_teleport end end) end
+if not q then pcall(function() q = queueonteleport end) end
+if q then
+local qok = pcall(q, boot)
+if not qok then
+local stub = string.format([==[
+repeat task.wait(1) until game:IsLoaded()
+if game.PlaceId ~= %d then return end
 local function _g(u)
 if request then local o,r=pcall(function() return request({Url=u,Method="GET"}) end) if o and r and r.Body then return r.Body end end
 if http_request then local o,r=pcall(function() return http_request({Url=u,Method="GET"}) end) if o and r and r.Body then return r.Body end end
@@ -3016,20 +3189,20 @@ if syn and syn.request then local o,r=pcall(function() return syn.request({Url=u
 local o,b=pcall(function() return game:HttpGet(u) end) if o and b then return b end
 end
 local s = _g(%q)
-if s then local f=loadstring(s); if f then f() end end
+if s and #s > 500 and #s < 350000 and s:find("ForageKit v", 1, true) then
+local f = loadstring(s); if f then pcall(f) end
+end
 ]==], placeId, FK_URL)
-local q
-pcall(function() q = queue_on_teleport end)
-if not q then pcall(function() if syn then q = syn.queue_on_teleport end end) end
-if not q then pcall(function() q = queueonteleport end) end
-if q then pcall(q, boot) end
+pcall(q, stub)
+end
+end
 end
 ------------------------------------------------------------------ wire forward hooks + boot
 dbg("boot")
 log              = guiLog
 updateStatus     = guiUpdateStatus
 onHerbsChanged   = reconcileList
-loadSettings()
+pcall(function() loadSettings() end)
 buildOverlays()
 buildWindow()
 pcall(pollCultProfile)
@@ -3047,6 +3220,7 @@ toast("The Jianghu Menu ready", "good")
 track(task.spawn(function()
 local acc, hb = 0, nil
 local pollProfileAcc = 0
+local _fkLastTickErr = nil
 hb = RunService.Heartbeat:Connect(function(dt)
 if not alive then hb:Disconnect(); return end
 pollProfileAcc = pollProfileAcc + dt
@@ -3057,26 +3231,35 @@ end
 acc = acc + dt
 if acc < (1 / CONFIG.DistanceHz) then return end
 acc = 0
+local okT, errT = pcall(function()
 for _, row in pairs(rows) do
--- use distSqTo for display (convert back to studs only for text)
-local h = nearestInstanceOf(row.typeId)
+-- cached nearest record per type (set in finalizeScan) — no O(H) walk per tick
+local nrec = State.nearestByType[row.typeId]
 if row.dist then
-if h then
-local sq = distSqTo(h)
-row.dist.Text = tostring(math.floor(math.sqrt(sq)))
+local hp = nrec and nrec.pos() or nil
+if hp then
+row.dist.Text = tostring(math.floor(math.sqrt(distSqTo(nrec))))
 else
 row.dist.Text = "--"
 end
 end
-if row.count then row.count.Text = tostring(#(State.byType[row.typeId] or {})) end
+local lst = State.byType[row.typeId]
+if row.count then row.count.Text = lst and tostring(#lst) or "0" end
 end
 guiUpdateStatus()
 if updateStatsPage then updateStatsPage() end
 end)
+if not okT then
+if log and errT ~= _fkLastTickErr then
+_fkLastTickErr = errT
+log("tick error: " .. tostring(errT), "bad")
+end
+end
+end)
 bag[#bag+1] = hb
 end))
 -- auto-breakthrough background loop
-trackAuto(task.spawn(function()
+track(task.spawn(function()
 while alive do
 task.wait(0.5)
 if autoBt.enabled and cultState then
@@ -3098,7 +3281,7 @@ end
 if autoBt.awaiting and cultState and autoBt.awaitPath then
 local node = cultState[autoBt.awaitPath]
 if node and node.Stage and node.Stage ~= autoBt.awaitStage then
-autoBt.feedback = "✓ REALM UP → " .. tostring(node.Stage)
+autoBt.feedback = "✓ REALM UP → " .. esc(node.Stage)
 autoBt.flashUntil = tick() + 2.0
 autoBt.awaiting = false
 elseif (tick() - autoBt.lastFire) > 8 then
@@ -3124,7 +3307,7 @@ track(task.spawn(function()
 local deadline = os.clock() + 40
 while alive and os.clock() < deadline and not hrp() do task.wait(1) end
 task.wait(2.5)
-if alive and not State.running then
+if alive and not State.running and CONFIG.AutoStart then
 local n = 0; for _ in pairs(State.selectedTypes) do n = n + 1 end
 if n > 0 then
 if log then log(("auto-resume: restarting saved selection (%d types)"):format(n), "good") end
@@ -3142,6 +3325,8 @@ alive = false
 State.running = false
 stopCapture(true)
 setScanning(false)
+if _saveTask then pcall(task.cancel, _saveTask); _saveTask = nil end
+if cultConn then pcall(cultConn.Disconnect, cultConn); cultConn = nil end
 for _, c in ipairs(bag) do pcall(function() c:Disconnect() end) end
 for m, rec in pairs(tracked) do detachRecord(rec) end
 tracked = {}
@@ -3152,16 +3337,19 @@ end)
 if guiRoot    then pcall(function() guiRoot:Destroy() end) end
 if toastHolder then pcall(function() toastHolder:Destroy() end) end
 if getgenv then getgenv().ForageKit = nil end
+pcall(function() getgenv().ForageKit_Debug = nil end)
 end
 ------------------------------------------------------------------ input
+local CAPTURE_BLOCKED = { W = true, A = true, S = true, D = true, Space = true }
 track(UserInput.InputBegan:Connect(function(inp, gpe)
-if gpe or not alive then return end
+if UserInput.TextBoxFocused then return end
 if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
 if capturing then
 if inp.KeyCode == Enum.KeyCode.Escape then
 stopCapture(true)
 else
 local key = inp.KeyCode
+if CAPTURE_BLOCKED[key.Name] then return end
 local act = capturing.action
 for other, btn in pairs(bindButtons) do
 if other ~= act and Binds[other] == key then
@@ -3175,6 +3363,7 @@ saveSettings()
 end
 return
 end
+if gpe or not alive then return end
 if inp.KeyCode == Binds.toggle then
 toggle()
 elseif inp.KeyCode == Binds.start then
