@@ -23,6 +23,7 @@ v5.13  --  COMPLETE UI REWORK (all v5.12 logic preserved)
        settings panel over a darkening scrim, scrollable sidebar.
 * KEPT v5.12 teleport-height anchor (feet land on the herb's plane),
        v5.11 GitHub rejoin + auto-resume, v5.10 hardening, v5.9 fixes.
+* REJOIN runs the EXACT loaded version (source embedded at boot); set getgenv().ForageKit_URL to rejoin/update from a non-main branch.
 Behaviour (unchanged)
 * ATTRIBUTE-based herb detection (HerbId) anywhere under Workspace.
 * Selection by HERB TYPE (farms every live instance + follows respawns).
@@ -94,6 +95,12 @@ local SaveFileName = "ForageKit_Settings.json"
 local VALID_MODES  = { Walk = true, Tween = true, Teleport = true, Adaptive = true }
 local VALID_STRATEGIES = { Nearest = true, Sequence = true }
 local FK_URL       = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/JianghuFull.txt"
+-- override before load to rejoin/update from a non-main branch:
+--   getgenv().ForageKit_URL = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/<branch>/JianghuFull.txt"
+pcall(function()
+local u = getgenv and getgenv().ForageKit_URL
+if type(u) == "string" and u:find("http", 1, true) and #u < 300 then FK_URL = u end
+end)
 local function _fkFetch()
 if request then local o, r = pcall(function() return request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
 if http_request then local o, r = pcall(function() return http_request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
@@ -3163,7 +3170,33 @@ end
 ------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
 local function armRejoin()
 local placeId = game.PlaceId
-local boot = string.format([==[
+local src = nil
+pcall(function()
+if debug then
+if debug.info then
+local s = debug.info(1, "s")
+if type(s) == "string" then src = s end
+elseif debug.getinfo then
+local i = debug.getinfo(1, "S")
+if type(i) == "table" and type(i.source) == "string" then src = i.source end
+end
+end
+end)
+if src then
+if src:sub(1, 1) == "=" then src = src:sub(2) end
+if src:sub(1, 2) ~= "--" or not src:find("ForageKit", 1, true) or #src < 5000 or #src > 400000 then src = nil end
+end
+local boot
+if src then
+boot = string.format([==[
+repeat task.wait(1) until game:IsLoaded()
+if game.PlaceId ~= %d then return end
+task.wait(2)
+local s = %q
+if s then local f = loadstring(s); if f then pcall(f) end end
+]==], placeId, src)
+else
+boot = string.format([==[
 repeat task.wait(1) until game:IsLoaded()
 if game.PlaceId ~= %d then return end
 task.wait(2)
@@ -3179,6 +3212,7 @@ if s and #s > 500 and #s < 350000 and s:find("ForageKit v", 1, true) then
 local f = loadstring(s); if f then pcall(f) end
 end
 ]==], placeId, FK_URL)
+end
 local q
 pcall(function() q = queue_on_teleport end)
 if not q then pcall(function() if syn then q = syn.queue_on_teleport end end) end
