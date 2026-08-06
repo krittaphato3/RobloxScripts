@@ -130,31 +130,72 @@ if FK_SHA256 and not digest then return false end
 return true
 end
 ------------------------------------------------------------------ design tokens: palette
+-- "The Midnight Atelier" — BG tiers, hairline borders, jade+gold accents, status palette
 local J = {
-ink       = Color3.fromRGB(10,10,15),      -- #0A0A0F  window base
-midnight  = Color3.fromRGB(18,18,26),      -- #12121A  window base 2 / settings
-charcoal  = Color3.fromRGB(26,26,36),      -- #1A1A24  panels / cards
-raised    = Color3.fromRGB(34,34,47),      -- hover / raised surfaces
-overlay   = Color3.fromRGB(22,22,31),
-jade      = Color3.fromRGB(45,212,168),    -- #2DD4A8  primary accent
-jadeDk    = Color3.fromRGB(22,128,102),
-jadeGlow  = Color3.fromRGB(94,234,198),
-gold      = Color3.fromRGB(212,175,55),    -- #D4AF37  premium / locked
-goldDk    = Color3.fromRGB(140,112,38),
-goldHair  = Color3.fromRGB(84,72,44),      -- hairline gold-tint
-crimson   = Color3.fromRGB(220,38,38),     -- #DC2626  danger only
-crimsonDk = Color3.fromRGB(140,26,26),
-amber     = Color3.fromRGB(224,164,88),
-text      = Color3.fromRGB(245,245,240),   -- #F5F5F0  primary text
-silver    = Color3.fromRGB(156,163,175),   -- #9CA3AF  secondary text
-disabled  = Color3.fromRGB(75,85,99),      -- #4B5563  disabled text
-border    = Color3.fromRGB(42,42,53),      -- #2A2A35  borders / dividers
-borderHi  = Color3.fromRGB(62,62,80),
+-- background tiers
+base       = Color3.fromRGB(10,14,13),     -- BG-Base    window frame, tab bar
+surface    = Color3.fromRGB(14,19,17),     -- BG-Surface panels, cards, header
+raised     = Color3.fromRGB(16,22,20),     -- BG-Raised  buttons, inputs, thumb
+hover      = Color3.fromRGB(23,31,28),     -- BG-Hover   hover fill
+pressed    = Color3.fromRGB(12,17,16),     -- BG-Pressed pressed fill
+sunken     = Color3.fromRGB(8,11,10),      -- BG-Sunken  wells, tracks, toggle off
+scrim      = Color3.fromRGB(0,0,0),        -- BG-Scrim   overlay
+-- borders
+border     = Color3.fromRGB(38,48,44),     -- Border-Hairline 1px edges
+hairline2  = Color3.fromRGB(54,66,60),     -- Border-Hairline-2 dropdown/modal/selected
+focus      = Color3.fromRGB(64,196,150),   -- Border-Focus 2px focus ring
+-- text
+text       = Color3.fromRGB(232,233,227),  -- Text-Primary
+textSecondary = Color3.fromRGB(164,172,166), -- Text-Secondary
+muted      = Color3.fromRGB(108,118,112),  -- Text-Muted captions only
+disabled   = Color3.fromRGB(58,66,62),     -- Text-Disabled
+onAccent   = Color3.fromRGB(8,12,10),      -- Text-OnAccent ink on jade/gold fills
+textGold   = Color3.fromRGB(218,178,92),   -- Text-Gold milestones
+-- accents
+jade       = Color3.fromRGB(64,196,150),   -- Accent-Jade primary identity
+jadeBright = Color3.fromRGB(72,210,162),   -- Accent-Jade-Bright hover lift
+jadeDk     = Color3.fromRGB(46,158,118),   -- Accent-Jade-Deep pressed
+jadeWash   = Color3.fromRGB(23,46,39),     -- Accent-Jade-Wash 15% jade tint
+gold       = Color3.fromRGB(218,178,92),   -- Accent-Gold milestones
+goldDeep   = Color3.fromRGB(168,130,58),   -- Accent-Gold-Deep pressed
+paper      = Color3.fromRGB(232,233,227),  -- thumb / ink surfaces
+-- status
+ok         = Color3.fromRGB(92,186,128),   -- Status-Success
+warn       = Color3.fromRGB(226,164,64),   -- Status-Warning
+danger     = Color3.fromRGB(198,72,72),    -- Status-Danger
+dangerText = Color3.fromRGB(214,94,94),    -- Status-Danger-Text
+dangerBtn  = Color3.fromRGB(208,86,86),    -- Status-Danger-Btn
+info       = Color3.fromRGB(125,185,200),  -- Status-Info
+-- data-viz series
+seriesIce     = Color3.fromRGB(125,185,200),
+seriesRose    = Color3.fromRGB(196,128,108),
+seriesCeladon = Color3.fromRGB(150,190,160),
+seriesEmber   = Color3.fromRGB(225,148,76),
+-- legacy aliases (existing sections resolve against these)
+ink       = Color3.fromRGB(10,14,13),      -- legacy: window base
+midnight  = Color3.fromRGB(14,19,17),      -- legacy: panel / settings / log
+charcoal  = Color3.fromRGB(14,19,17),      -- legacy: cards / status bar
+overlay   = Color3.fromRGB(23,46,39),      -- legacy: selected card wash
+jadeGlow  = Color3.fromRGB(72,210,162),    -- legacy: jade hover glow
+goldDk    = Color3.fromRGB(168,130,58),    -- legacy: gold deep
+goldHair  = Color3.fromRGB(54,66,60),      -- legacy: gold-tinted hairline
+crimson   = Color3.fromRGB(198,72,72),     -- legacy: danger
+crimsonDk = Color3.fromRGB(164,58,58),     -- legacy: danger deep
+amber     = Color3.fromRGB(226,164,64),    -- legacy: warning
+silver    = Color3.fromRGB(164,172,166),   -- legacy: secondary text
+borderHi  = Color3.fromRGB(54,66,60),      -- legacy: hairline-2
 }
 ------------------------------------------------------------------ design tokens: type + spacing
-local FONT_DISPLAY = Enum.Font.Garamond      -- elegant serif (closest to Cinzel in Enum)
-local FONT_BODY    = Enum.Font.SourceSans     -- clean sans (closest to Montserrat in Enum)
-local FONT_MONO    = Enum.Font.RobotoMono     -- logs / data
+local function fontP(a, b, c)
+local ok, v = pcall(function() return Enum.Font[a] end)
+if ok and v then return v end
+local ok2, v2 = pcall(function() return Enum.Font[b] end)
+if ok2 and v2 then return v2 end
+return Enum.Font[c]
+end
+local FONT_DISPLAY = fontP("PlayfairDisplayBold", "GaramondBold", "SourceSansSemibold") -- display serif
+local FONT_BODY    = Enum.Font.SourceSans     -- body sans
+local FONT_MONO    = fontP("RobotoMono", "SourceSans", "SourceSans") -- data / logs
 -- spacing follows a 4px base unit (4/8/12/16/20/24) used throughout
 ------------------------------------------------------------------ services
 local Players      = game:GetService("Players")
@@ -302,6 +343,8 @@ end
 local log, updateStatus, onHerbsChanged, toast, shimmer, setScanning
 local refreshSettingsHighlight, openSettings, closeSettings, destroy
 local gui, main, content, tabsBar, listFrame, emptyState, settingsFrame = {}, {}, {}, nil, nil, nil, nil
+local headerFrame = nil  -- header shell (buildHeader) — consumed by the setVisible entrance stagger
+local statusBar = nil    -- status bar frame (buildMain) — consumed by the setVisible entrance stagger
 local modeButtons, strategyButtons, rows, knownTypes, tracked, bindButtons, settingsSegs = {}, {}, {}, {}, {}, {}, {}
 local toastHolder = nil
 local guiRoot = nil
@@ -315,6 +358,8 @@ local tabButtons = {}     -- tab name -> TextButton
 local tabIndicator = nil  -- jade underline
 local harvestSidebar = nil
 local harvestContent = nil
+local _indicatorInit = false  -- tab indicator: first switch snaps, later switches tween (0.18s Cubic Out)
+local _bodyConfirmOverlay = nil  -- Body Auto-BT confirm overlay (hoisted: reader = closeSettings, writer = _setBodyBtWithConfirm)
 ------------------------------------------------------------------ scanner
 dbg("scanner")
 local Scanner = {}
@@ -1086,6 +1131,8 @@ saveSettings()
 end
 ------------------------------------------------------------------ UI primitives
 dbg("ui primitives")
+-- radius tokens: R0 0 / R1 4 / R2 8 / R3 12 / R-Pill 999
+local R0, R1, R2, R3, RPILL = 0, 4, 8, 12, 999
 local function mk(cls, props, parent)
 local o = Instance.new(cls)
 for k, v in pairs(props or {}) do pcall(function() o[k] = v end) end
@@ -1099,7 +1146,7 @@ s.Color = col; s.Thickness = t or 1; s.Transparency = tr or 0
 return s
 end
 local function grad(o, c1, c2, rot, transSeq)
-c1 = c1 or J.charcoal; c2 = c2 or J.midnight
+c1 = c1 or J.raised; c2 = c2 or J.sunken
 local g = mk("UIGradient", {Color = ColorSequence.new(c1, c2), Rotation = rot or 0}, o)
 if transSeq then pcall(function() g.Transparency = transSeq end) end
 return g
@@ -1115,143 +1162,227 @@ TextYAlignment = Enum.TextYAlignment.Center,
 for k, v in pairs(props or {}) do pcall(function() t[k] = v end) end
 return t
 end
-local function dlabel(props, parent)  -- display serif (Garamond)
+local function dlabel(props, parent)  -- display serif (PlayfairDisplayBold)
 local t = label(props, parent); t.Font = FONT_DISPLAY; return t
 end
 local function mlabel(props, parent)  -- monospace (RobotoMono)
 local t = label(props, parent); t.Font = FONT_MONO; return t
 end
--- thin horizontal divider with gradient-fade edges (gold-tinted)
-local function divider(parent, pos)
-local d = mk("Frame", {Size = UDim2.new(1,0,0,1), Position = pos, BackgroundColor3 = J.goldHair, BorderSizePixel = 0}, parent)
-grad(d, J.goldHair, J.goldHair, 0, NumberSequence.new({
-NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0.35), NumberSequenceKeypoint.new(1, 1),
+-- hairline with gradient-fade edges (spec: 0->1, 0.08->0, 0.92->0, 1->1)
+local function hairlineFade(parent, pos, vertical, col)
+local d = mk("Frame", {Size = vertical and UDim2.new(0,1,1,0) or UDim2.new(1,0,0,1), Position = pos, BackgroundColor3 = col or J.border, BorderSizePixel = 0}, parent)
+grad(d, col or J.border, col or J.border, 0, NumberSequence.new({
+NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.08, 0), NumberSequenceKeypoint.new(0.92, 0), NumberSequenceKeypoint.new(1, 1),
 }))
 return d
 end
--- section header: jade tick + uppercase label + optional subtitle
+-- thin horizontal divider with gradient-fade edges (Border-Hairline)
+local function divider(parent, pos)
+return hairlineFade(parent, pos, false, J.border)
+end
+-- thin-space letter-spacing for decorative strings only (brand, section headers)
+local function letterSpace(s)
+if #s <= 1 then return s end
+local thin = string.char(0xE2, 0x80, 0x89)
+return (s:gsub("(.)", "%1" .. thin)):sub(1, -4)
+end
+-- section header: Type-Section uppercase letter-spaced + gradient hairline below
 local function sectionHead(parent, text, sub, accentColor)
-local h = sub and 32 or 20
+local h = sub and 34 or 22
 local wrap = mk("Frame", {Size = UDim2.new(1,0,0,h), BackgroundTransparency = 1}, parent)
-mk("Frame", {Size = UDim2.new(0,2,0,10), Position = UDim2.new(0,0,0,2), BackgroundColor3 = accentColor or J.jade, BorderSizePixel = 0}, wrap)
-local t = label({Text = text:upper(), TextSize = 10, TextColor3 = J.silver,
-Position = UDim2.new(0,10,0,0), Size = UDim2.new(1,-10,0,14), AutomaticSize = Enum.AutomaticSize.X}, wrap)
+local col = accentColor or J.gold
+local t = label({Text = letterSpace(text:upper()), TextSize = 11, TextColor3 = col,
+Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,0,16), AutomaticSize = Enum.AutomaticSize.X}, wrap)
 setWeight(t, Enum.FontWeight.SemiBold)
 if sub then
-label({Text = sub, TextSize = 9, TextColor3 = J.disabled,
-Position = UDim2.new(0,10,0,15), Size = UDim2.new(1,-10,0,14)}, wrap)
+label({Text = sub, TextSize = 10, TextColor3 = J.muted,
+Position = UDim2.new(0,0,0,16), Size = UDim2.new(1,0,0,14)}, wrap)
 end
+hairlineFade(wrap, UDim2.new(0,0,1,-1), false, col)
 return wrap
 end
 ------------------------------------------------------------------ button factory
-local KIND = {
-primary   = { bg = J.jade,     fg = J.ink,   stk = J.jadeDk,    hi = J.jadeGlow },
-secondary = { bg = J.charcoal, fg = J.text,  stk = J.border,    hi = J.raised },
-danger    = { bg = J.crimson,  fg = J.text,  stk = J.crimsonDk, hi = Color3.fromRGB(239,68,68) },
-ghost     = { bg = J.charcoal, fg = J.silver,stk = J.border,    hi = J.raised },
+local BTN = {
+primary       = { bg = J.jade, fg = J.onAccent, hi = J.jadeBright, press = J.jadeDk,   stk = J.hairline, depth = true },
+primaryGold   = { bg = J.gold, fg = J.onAccent, hi = J.textGold,   press = J.goldDeep, stk = J.goldDeep, depth = true },
+secondary     = { bg = J.surface, fg = J.text,  hi = J.hover,      press = J.pressed,  stk = J.hairline, depth = false },
+outline       = { bg = nil, fg = J.text, hi = J.hover, press = J.pressed, stk = J.hairline2, depth = false, line = true },
+danger        = { bg = J.dangerBtn, fg = J.onAccent, hi = Color3.fromRGB(222,102,102), press = J.danger, stk = J.hairline, depth = true },
+outlineDanger = { bg = nil, fg = J.dangerText, hi = J.hover, press = J.pressed, stk = J.danger, depth = false, line = true },
+ghost         = { bg = nil, fg = J.textSecondary, hi = J.hover, press = J.pressed, stk = J.hairline, depth = false, line = true },
+icon          = { bg = J.surface, fg = J.text, hi = J.hover, press = J.pressed, stk = J.hairline, depth = false },
 }
+-- Atelier Shadow (3 layers): depth frame + hairline stroke + accent glow backing
+local function atelierShadow(b, o, k, v)
+if not k.depth then return nil end
+local bz = o.zIndex or 1
+local back = math.max(0, bz - 1)
+local depth = mk("Frame", {Size = UDim2.new(1,0,1,6), Position = UDim2.new(0,0,0,3),
+BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.72,
+BorderSizePixel = 0, ZIndex = back}, b)
+corner(depth, (o.radius or R1) + 2)
+grad(depth, Color3.new(0,0,0), Color3.new(0,0,0), 90, NumberSequence.new({
+NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 0.88),
+}))
+local glow = mk("Frame", {Size = UDim2.new(1.1,0,1.1,0), Position = UDim2.new(0.5,0,0.5,1),
+AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = k.bg, BackgroundTransparency = 0.85,
+BorderSizePixel = 0, ZIndex = back}, b)
+corner(glow, (o.radius or R1) + 2)
+if v == "primaryGold" then
+-- gold shimmer sweep (0.9s loop) on the backing glow
+TweenSvc:Create(glow, TweenInfo.new(0.9, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, -1), {BackgroundTransparency = 0.55}):Play()
+end
+b.MouseEnter:Connect(function()
+pcall(function() TweenSvc:Create(depth, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0,0,0,1), BackgroundTransparency = 0.66}):Play() end)
+end)
+b.MouseLeave:Connect(function()
+pcall(function() TweenSvc:Create(depth, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0,0,0,3), BackgroundTransparency = 0.72}):Play() end)
+end)
+return depth
+end
 local function mkButton(parent, o)
-local k = KIND[o.kind or "secondary"]
+o = o or {}
+local v = o.variant or o.kind or "secondary"
+local k = BTN[v] or BTN.secondary
+local solid = not not k.bg
 local b = mk("TextButton", {
 Text = o.text or "", Font = FONT_BODY, TextSize = o.textSize or 12,
 TextColor3 = o.disabled and J.disabled or k.fg,
-BackgroundColor3 = o.disabled and J.charcoal or k.bg,
-Size = o.size, Position = o.pos, AutoButtonColor = false,
-Active = not o.disabled, BackgroundTransparency = 0,
+BackgroundColor3 = o.disabled and J.raised or (k.bg or Color3.new(0,0,0)),
+BackgroundTransparency = o.disabled and 0 or (solid and 0 or 1),
+Size = o.size or UDim2.new(0, o.width or 120, 0, o.height or 32),
+Position = o.pos, AutoButtonColor = false, Active = not o.disabled,
+ZIndex = o.zIndex or 1,
 }, parent)
 setWeight(b, Enum.FontWeight.SemiBold)
-corner(b, o.radius or 6)
-local st = stroke(b, o.disabled and J.border or k.stk, 1, o.disabled and 0.6 or 0.3)
-if o.gradient and not o.disabled then grad(b, k.bg, k.hi, 90) end
+corner(b, o.radius or R1)
+local st = stroke(b, o.disabled and J.border or k.stk, 1, o.disabled and 0.6 or (k.line and 0.4 or 0.35))
+if o.gradient and not o.disabled and k.bg then grad(b, k.bg, k.hi, 90) end
+atelierShadow(b, o, k, v)
 if not o.disabled then
-b.MouseEnter:Connect(function()
-if not o.gradient then
-TweenSvc:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = k.hi}):Play()
-end
-TweenSvc:Create(st, TweenInfo.new(0.15), {Color = J.borderHi, Transparency = 0.1}):Play()
-end)
-b.MouseLeave:Connect(function()
-if not o.gradient then
-TweenSvc:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = k.bg}):Play()
-end
-TweenSvc:Create(st, TweenInfo.new(0.15), {Color = k.stk, Transparency = 0.3}):Play()
-end)
 local base = b.Size
-b.MouseButton1Down:Connect(function()
-pcall(function() TweenSvc:Create(b, TweenInfo.new(0.07), {Size = UDim2.new(base.X.Scale, base.X.Offset-2, base.Y.Scale, base.Y.Offset-2)}):Play() end)
+local hovered = false
+local function paintHover(h)
+hovered = h
+if not o.gradient then
+pcall(function()
+TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+BackgroundColor3 = o.disabled and J.raised or (h and k.hi or (k.bg or Color3.new(0,0,0))),
+BackgroundTransparency = o.disabled and 0 or ((h or solid) and 0 or 1),
+}):Play()
 end)
-local function up() pcall(function() TweenSvc:Create(b, TweenInfo.new(0.13, Enum.EasingStyle.Back), {Size = base}):Play() end) end
+end
+if v == "ghost" then
+pcall(function() TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = h and J.text or k.fg}):Play() end)
+end
+if k.line then
+pcall(function() TweenSvc:Create(st, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Color = h and J.hairline2 or k.stk, Thickness = h and 2 or 1, Transparency = h and 0.15 or 0.4}):Play() end)
+end
+end
+b.MouseEnter:Connect(function() paintHover(true) end)
+b.MouseLeave:Connect(function() paintHover(false) end)
+b.MouseButton1Down:Connect(function()
+pcall(function()
+TweenSvc:Create(b, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(base.X.Scale, base.X.Offset-2, base.Y.Scale, base.Y.Offset-2)}):Play()
+end)
+if not o.gradient then
+pcall(function()
+TweenSvc:Create(b, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+BackgroundColor3 = o.disabled and J.raised or k.press,
+BackgroundTransparency = o.disabled and 0 or 0,
+}):Play()
+end)
+end
+end)
+local function up()
+pcall(function() TweenSvc:Create(b, TweenInfo.new(0.13, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = base}):Play() end)
+if not o.gradient then
+pcall(function()
+TweenSvc:Create(b, TweenInfo.new(0.06, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+BackgroundColor3 = o.disabled and J.raised or (hovered and k.hi or (k.bg or Color3.new(0,0,0))),
+BackgroundTransparency = o.disabled and 0 or ((hovered or solid) and 0 or 1),
+}):Play()
+end)
+end
+end
 b.MouseButton1Up:Connect(up); b.MouseLeave:Connect(up)
 if o.onClick then b.MouseButton1Click:Connect(o.onClick) end
 end
 return b
 end
 ------------------------------------------------------------------ icons (minimal line style, consistent stroke)
-local function makeJadeIcon(parent)  -- jade bi-disc pendant with gold rim
-local wrap = mk("Frame", {Size = UDim2.new(0,24,0,24), BackgroundTransparency = 1}, parent)
-local disc = mk("Frame", {Size = UDim2.new(0,22,0,22), Position = UDim2.new(0,1,0,1), BackgroundColor3 = J.jade, BorderSizePixel = 0}, wrap)
-corner(disc, 11); grad(disc, J.jade, J.jadeDk, 90); stroke(disc, J.gold, 1.5, 0.1)
-local hole = mk("Frame", {Size = UDim2.new(0,8,0,8), Position = UDim2.new(0,7,0,7), BackgroundColor3 = J.charcoal, BorderSizePixel = 0}, wrap)
-corner(hole, 4); stroke(hole, J.goldDk, 1, 0.4)
+local function makeJadeIcon(parent)  -- 36x36 seal, PlayfairDisplayBold "F" on jade
+local wrap = mk("Frame", {Size = UDim2.new(0,36,0,36), BackgroundTransparency = 1}, parent)
+local seal = mk("Frame", {Size = UDim2.new(0,36,0,36), Position = UDim2.new(0,0,0,0), BackgroundColor3 = J.jade, BorderSizePixel = 0}, wrap)
+corner(seal, R1); grad(seal, J.jade, J.jadeDk, 90); stroke(seal, J.gold, 1.5, 0.25)
+dlabel({Text = "F", TextSize = 18, TextColor3 = J.onAccent,
+Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0),
+TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center}, seal)
 return wrap
 end
 local function makeGear(parent)
-local g = mk("TextButton", {BackgroundTransparency = 1, Size = UDim2.new(0,30,0,30), Text = "", AutoButtonColor = false}, parent)
-local ring = mk("Frame", {Size = UDim2.new(0,13,0,13), AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5,0,.5,0), BackgroundColor3 = J.silver, BorderSizePixel = 0}, g); corner(ring, 7)
-local hole = mk("Frame", {Size = UDim2.new(0,6,0,6), AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5,0,.5,0), BackgroundColor3 = J.charcoal, BorderSizePixel = 0}, g); corner(hole, 3)
+local g = mk("TextButton", {BackgroundTransparency = 1, Size = UDim2.new(0,36,0,36), Text = "", AutoButtonColor = false}, parent)
+local ring = mk("Frame", {Size = UDim2.new(0,14,0,14), AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5,0,.5,0), BackgroundTransparency = 1, BorderSizePixel = 0}, g)
+corner(ring, 7); stroke(ring, J.textSecondary, 1.5, 0.1)
+local hub = mk("Frame", {Size = UDim2.new(0,6,0,6), AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5,0,.5,0), BackgroundColor3 = J.textSecondary, BorderSizePixel = 0}, g); corner(hub, 3)
 for _, rot in ipairs({0,45,90,135}) do
-local n = mk("Frame", {Size = UDim2.new(0,3,0,17), AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5,0,.5,0), BackgroundColor3 = J.silver, BorderSizePixel = 0, Rotation = rot}, g)
+local n = mk("Frame", {Size = UDim2.new(0,3,0,20), AnchorPoint = Vector2.new(.5,.5), Position = UDim2.new(.5,0,.5,0), BackgroundColor3 = J.textSecondary, BorderSizePixel = 0, Rotation = rot}, g)
 corner(n, 1)
 end
-g.MouseEnter:Connect(function() TweenSvc:Create(ring, TweenInfo.new(0.25), {BackgroundColor3 = J.gold, Rotation = 40}):Play() end)
-g.MouseLeave:Connect(function() TweenSvc:Create(ring, TweenInfo.new(0.25), {BackgroundColor3 = J.silver, Rotation = 0}):Play() end)
+local function paint(col)
+for _, c in ipairs(g:GetChildren()) do
+if c:IsA("Frame") then TweenSvc:Create(c, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = col}):Play() end
+end
+end
+g.MouseEnter:Connect(function() paint(J.gold); TweenSvc:Create(g, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Rotation = 45}):Play() end)
+g.MouseLeave:Connect(function() paint(J.textSecondary); TweenSvc:Create(g, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Rotation = 0}):Play() end)
 return g
 end
 local function makeLock(parent)  -- gold lock for locked herbs
-local wrap = mk("Frame", {Size = UDim2.new(0,11,0,13), BackgroundTransparency = 1}, parent)
-local shackle = mk("Frame", {Size = UDim2.new(0,7,0,5), Position = UDim2.new(0,2,0,0), BackgroundTransparency = 1, BorderSizePixel = 0}, wrap)
+local wrap = mk("Frame", {Size = UDim2.new(0,12,0,14), BackgroundTransparency = 1}, parent)
+local shackle = mk("Frame", {Size = UDim2.new(0,7,0,5), Position = UDim2.new(0,2.5,0,0), BackgroundTransparency = 1, BorderSizePixel = 0}, wrap)
 corner(shackle, 3); stroke(shackle, J.gold, 1.5, 0.1)
-local body = mk("Frame", {Size = UDim2.new(0,11,0,7), Position = UDim2.new(0,0,0,5), BackgroundColor3 = J.gold, BorderSizePixel = 0}, wrap)
+local body = mk("Frame", {Size = UDim2.new(0,12,0,8), Position = UDim2.new(0,0,0,6), BackgroundColor3 = J.gold, BorderSizePixel = 0}, wrap)
 corner(body, 2)
 return wrap
 end
 ------------------------------------------------------------------ Coming Soon page builder
 local function buildComingSoon(tabName, iconGlyph, subtitle)
 local page = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 4})
-local wrap = mk("Frame", {Size = UDim2.new(0,340,0,280), AnchorPoint = Vector2.new(0.5,0.5),
-Position = UDim2.new(0.5,0,0.5,-20), BackgroundTransparency = 1}, page)
--- decorative ring
-local ring = mk("Frame", {Size = UDim2.new(0,80,0,80), AnchorPoint = Vector2.new(0.5,0.5),
-Position = UDim2.new(0.5,0,0,0), BackgroundColor3 = J.charcoal, BorderSizePixel = 0}, wrap)
-corner(ring, 40); stroke(ring, J.border, 1.5, 0.3)
--- icon glyph
-dlabel({Text = iconGlyph or "⚔", TextSize = 32, TextColor3 = J.gold,
-Position = UDim2.new(0,0,0,-16), Size = UDim2.new(1,0,0,48),
+local wrap = mk("Frame", {Size = UDim2.new(0,340,0,300), AnchorPoint = Vector2.new(0.5,0.5),
+Position = UDim2.new(0.5,0,0.5,-24), BackgroundTransparency = 1}, page)
+-- decorative ring (R-Pill, hairline)
+local ring = mk("Frame", {Size = UDim2.new(0,72,0,72), AnchorPoint = Vector2.new(0.5,0.5),
+Position = UDim2.new(0.5,0,0,0), BackgroundTransparency = 1, BorderSizePixel = 0}, wrap)
+corner(ring, RPILL); stroke(ring, J.hairline, 1.5, 0.3)
+-- icon glyph (muted)
+dlabel({Text = iconGlyph or "⚔", TextSize = 28, TextColor3 = J.muted,
+Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,0,48),
 TextXAlignment = Enum.TextXAlignment.Center}, wrap)
--- title
-dlabel({Text = tabName, TextSize = 22, TextColor3 = J.text,
-Position = UDim2.new(0,0,0,60), Size = UDim2.new(1,0,0,32),
+-- title (PlayfairDisplayBold 18)
+dlabel({Text = tabName, TextSize = 18, TextColor3 = J.text,
+Position = UDim2.new(0,0,0,64), Size = UDim2.new(1,0,0,28),
 TextXAlignment = Enum.TextXAlignment.Center}, wrap)
--- subtitle
+-- subtitle (SourceSans caption, wrapped, auto height)
 label({Text = subtitle or "This feature is being forged in the sect's hidden workshop.",
-TextSize = 12, TextColor3 = J.silver, TextWrapped = true,
-Position = UDim2.new(0,20,0,100), Size = UDim2.new(1,-40,0,40),
+TextSize = 12, TextColor3 = J.muted, TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y,
+Position = UDim2.new(0,24,0,100), Size = UDim2.new(1,-48,0,20),
 TextXAlignment = Enum.TextXAlignment.Center}, wrap)
--- "Coming Soon" badge
-local badge = mk("Frame", {Size = UDim2.new(0,120,0,32), AnchorPoint = Vector2.new(0.5,0.5),
-Position = UDim2.new(0.5,0,0,168), BackgroundColor3 = J.charcoal, BorderSizePixel = 0}, wrap)
-corner(badge, 16); stroke(badge, J.goldDk, 1, 0.4)
-dlabel({Text = "COMING SOON", TextSize = 11, TextColor3 = J.gold,
+-- "Coming Soon" badge (gold hairline pill)
+local badge = mk("Frame", {Size = UDim2.new(0,132,0,28), AnchorPoint = Vector2.new(0.5,0.5),
+Position = UDim2.new(0.5,0,0,176), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, wrap)
+corner(badge, RPILL); stroke(badge, J.goldDeep, 1, 0.4)
+dlabel({Text = letterSpace("COMING SOON"), TextSize = 10, TextColor3 = J.textGold,
 Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0),
 TextXAlignment = Enum.TextXAlignment.Center}, badge)
--- pulsing ring animation
+-- gentle ring pulse (Sine InOut, no overshoot) — gated loop preserved
 track(task.spawn(function()
-while alive and ring.Parent and main.frame and main.frame.Visible and not minimized do
+while alive and main.frame and main.frame.Visible and not minimized do
 pcall(function() TweenSvc:Create(ring, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-{Size = UDim2.new(0,88,0,88), BackgroundTransparency = 0.15}):Play() end)
+{Size = UDim2.new(0,80,0,80), BackgroundTransparency = 0.15}):Play() end)
 task.wait(2.4)
 pcall(function() TweenSvc:Create(ring, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-{Size = UDim2.new(0,80,0,80), BackgroundTransparency = 0}):Play() end)
+{Size = UDim2.new(0,72,0,72), BackgroundTransparency = 0}):Play() end)
 task.wait(2.4)
 end
 end))
@@ -1259,35 +1390,70 @@ return page
 end
 ------------------------------------------------------------------ tab content switcher
 local function switchTab(tabName)
+if tabName == "Harvesting" then
+if listFrame then listFrame.Visible = true end
+if emptyState then emptyState.Visible = (#knownSorted() == 0) end
+end
 if tabName == activeTab then return end
 activeTab = tabName
--- hide all pages
+-- hide all pages (bookkeeping identical to prior behavior)
 for name, page in pairs(tabPages) do
 page.contentFrame.Visible = (name == tabName)
 if page.sidebarFrame then page.sidebarFrame.Visible = (name == tabName) end
 end
--- update tab button styles
-for name, btn in pairs(tabButtons) do
-local isActive = (name == tabName)
-pcall(function() btn.TextColor3 = isActive and J.text or J.silver end)
-end
--- slide indicator
-if tabIndicator and tabButtons[tabName] then
+	-- update tab button styles (idle = Text-Muted per UX_SPEC §5; hover handled by buildTabs)
+	for name, btn in pairs(tabButtons) do
+	local isActive = (name == tabName)
+	pcall(function() btn.TextColor3 = isActive and J.text or J.muted end)
+	end
+-- content crossfade: fade-in the newly shown page (0.12s Quad Out, fade only)
+local shown = tabPages[tabName]
+if shown then
 pcall(function()
-local btn = tabButtons[tabName]
-local btnX = btn.Position.X.Offset
-TweenSvc:Create(tabIndicator, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-{Position = UDim2.new(0, btnX, 1, -2)}):Play()
+local cf = shown.contentFrame
+if cf then
+cf.GroupTransparency = 1
+TweenSvc:Create(cf, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
+end
+if shown.sidebarFrame then
+shown.sidebarFrame.GroupTransparency = 1
+TweenSvc:Create(shown.sidebarFrame, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
+end
 end)
 end
-end
+	-- tab indicator slide: 2px jade bar tweens Position.X + Size.X to the active tab
+	-- (0.18s Cubic Out per UX_SPEC §4); first switch snaps, later switches tween
+	local btn = tabButtons[tabName]
+	local ind = tabIndicator
+	if btn and ind then
+	local tx = btn.Position.X.Offset
+	local tw = btn.AbsoluteSize.X
+	if not _indicatorInit then
+	_indicatorInit = true
+	ind.Position = UDim2.new(0, tx, 1, -2)
+	ind.Size = UDim2.new(0, tw, 0, 2)
+	else
+	pcall(function()
+	TweenSvc:Create(ind, TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+	{Position = UDim2.new(0, tx, 1, -2), Size = UDim2.new(0, tw, 0, 2)}):Play()
+	end)
+	end
+	end
+	end
 ------------------------------------------------------------------ toasts (top-right, stacked, slide-in)
+local TOAST_KIND = {
+good = { col = J.ok,         dur = 2.8, title = "SUCCESS" },
+info = { col = J.info,       dur = 3.2, title = "INFO" },
+warn = { col = J.warn,       dur = 4.0, title = "WARNING" },
+bad  = { col = J.dangerText, dur = 5.0, title = "ERROR" },
+}
+local TOAST_W, TOAST_H, TOAST_GAP = 320, 56, 44
 local function restackToasts()
 for i, p in ipairs(activeToasts) do
 if p and p.Parent then
 pcall(function()
-TweenSvc:Create(p, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-{Position = UDim2.new(1, -288, 0, 66 + (i-1)*44)}):Play()
+TweenSvc:Create(p, TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+{Position = UDim2.new(1, -TOAST_W - 16, 0, 66 + (i-1)*TOAST_GAP)}):Play()
 end)
 end
 end
@@ -1295,41 +1461,70 @@ end
 function toast(msg, kind)
 if not CONFIG.ShowToasts or not toastHolder then return end
 kind = kind or "info"
-local accent = ({good = J.jade, warn = J.amber, bad = J.crimson, info = J.silver})[kind] or J.silver
-local pill = mk("Frame", {
-Size = UDim2.new(0,264,0,36), Position = UDim2.new(1,20,0,66 + (#activeToasts)*44),
-BackgroundColor3 = J.charcoal, BorderSizePixel = 0,
+local k = TOAST_KIND[kind] or TOAST_KIND.info
+local stackY = 66 + (#activeToasts)*TOAST_GAP
+local pill = mk("TextButton", {
+Text = "", Font = FONT_BODY, TextSize = 12, AutoButtonColor = false,
+Size = UDim2.new(0,TOAST_W,0,TOAST_H), Position = UDim2.new(1, -TOAST_W - 16 + 24, 0, stackY),
+BackgroundColor3 = J.surface, BorderSizePixel = 0,
 }, toastHolder)
-corner(pill, 8); stroke(pill, J.border, 1, 0.3)
-mk("Frame", {Size = UDim2.new(0,3,1,-12), Position = UDim2.new(0,0,0,6), BackgroundColor3 = accent, BorderSizePixel = 0}, pill)
-local dot = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,12,0.5,-3), BackgroundColor3 = accent, BorderSizePixel = 0}, pill); corner(dot, 3)
-label({Text = tostring(msg), TextSize = 12, TextColor3 = J.text,
-Position = UDim2.new(0,26,0,0), Size = UDim2.new(1,-36,1,0), AutomaticSize = Enum.AutomaticSize.X}, pill)
+corner(pill, R2); stroke(pill, J.hairline, 1, 0.35)
+-- Atelier depth shadow
+local depth = mk("Frame", {Size = UDim2.new(1,0,1,6), Position = UDim2.new(0,0,0,3),
+BackgroundColor3 = Color3.new(0,0,0), BackgroundTransparency = 0.72,
+BorderSizePixel = 0, ZIndex = 0}, pill)
+corner(depth, R2 + 2)
+grad(depth, Color3.new(0,0,0), Color3.new(0,0,0), 90, NumberSequence.new({
+NumberSequenceKeypoint.new(0, 0.45), NumberSequenceKeypoint.new(1, 0.88),
+}))
+-- status icon 8x8 (R-Pill)
+local icon = mk("Frame", {Size = UDim2.new(0,8,0,8), Position = UDim2.new(0,16,0,12), BackgroundColor3 = k.col, BorderSizePixel = 0}, pill); corner(icon, RPILL)
+-- title + body
+local title = label({Text = k.title, TextSize = 13, TextColor3 = J.text,
+Position = UDim2.new(0,32,0,8), Size = UDim2.new(1,-48,0,16), AutomaticSize = Enum.AutomaticSize.X}, pill)
+setWeight(title, Enum.FontWeight.SemiBold)
+local body = label({Text = tostring(msg), TextSize = 12, TextColor3 = J.textSecondary,
+Position = UDim2.new(0,32,0,26), Size = UDim2.new(1,-48,0,20),
+TextWrapped = true, AutomaticSize = Enum.AutomaticSize.Y}, pill)
+-- countdown line 1px, shrinks Linear over lifetime
+local cd = mk("Frame", {Size = UDim2.new(1,-24,0,1), Position = UDim2.new(0,12,1,-1),
+BackgroundColor3 = k.col, BorderSizePixel = 0}, pill)
 activeToasts[#activeToasts+1] = pill
-if #activeToasts > 5 then
+if #activeToasts > 4 then
 local oldest = table.remove(activeToasts, 1)
 pcall(function() oldest:Destroy() end)
 end
+-- enter: slide -24px + fade, Cubic Out, no overshoot
+pill.GroupTransparency = 1
+TweenSvc:Create(pill, TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+{Position = UDim2.new(1, -TOAST_W - 16, 0, stackY), GroupTransparency = 0}):Play()
+local cdTween = TweenSvc:Create(cd, TweenInfo.new(k.dur, Enum.EasingStyle.Linear, Enum.EasingDirection.In), {Size = UDim2.new(0,0,0,1)})
+cdTween:Play()
 restackToasts()
-task.delay(2.6, function()
+local function dismiss()
 for i, p in ipairs(activeToasts) do
 if p == pill then table.remove(activeToasts, i); break end
 end
+pcall(function() cdTween:Cancel() end)
 restackToasts()
 if not pill.Parent then return end
 local yOff = pill.Position.Y.Offset
-local tw = TweenSvc:Create(pill, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-{Position = UDim2.new(1, 20, 0, yOff), BackgroundTransparency = 1})
+local tw = TweenSvc:Create(pill, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+{Position = UDim2.new(1, -TOAST_W - 16, 0, yOff - 8), GroupTransparency = 1})
 tw:Play(); tw.Completed:Connect(function() pcall(function() pill:Destroy() end) end)
+end
+pill.MouseButton1Click:Connect(dismiss)
+task.delay(k.dur, function()
+if pill.Parent then dismiss() end
 end)
 end
--- subtle gold pulse on the status bar border when a scan completes
+-- subtle gold sweep on the status bar border when a scan completes
 function shimmer()
 if not gui.statusStroke then return end
 pcall(function()
-TweenSvc:Create(gui.statusStroke, TweenInfo.new(0.2), {Color = J.gold, Transparency = 0.2}):Play()
+TweenSvc:Create(gui.statusStroke, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Color = J.gold, Transparency = 0.15}):Play()
 task.delay(0.35, function()
-pcall(function() TweenSvc:Create(gui.statusStroke, TweenInfo.new(0.6), {Color = J.border, Transparency = 0.3}):Play() end)
+pcall(function() TweenSvc:Create(gui.statusStroke, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Color = J.border, Transparency = 0.3}):Play() end)
 end)
 end)
 end
@@ -1341,16 +1536,37 @@ if on then
 if gui.scanSpin then pcall(function() gui.scanSpin:Cancel() end) end
 gui.scanSpin = TweenSvc:Create(gui.scanRing, TweenInfo.new(0.7, Enum.EasingStyle.Linear, Enum.EasingDirection.In, 0), {Rotation = 360})
 pcall(function() gui.scanSpin:Play() end)
+-- ring pulse: stroke breathes while scanning (1.2s Sine InOut loop)
+pcall(function()
+local st = gui.scanRing.UIStroke
+if st then
+if gui._scanPulse then pcall(function() gui._scanPulse:Cancel() end) end
+gui._scanPulse = TweenSvc:Create(st, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, -1), {Transparency = 0.7})
+gui._scanPulse:Play()
+end
+end)
 else
 if gui.scanSpin then pcall(function() gui.scanSpin:Cancel() end) end
 gui.scanRing.Rotation = 0
+pcall(function()
+local st = gui.scanRing.UIStroke
+if st then
+if gui._scanPulse then pcall(function() gui._scanPulse:Cancel() end); gui._scanPulse = nil end
+TweenSvc:Create(st, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 0.1}):Play()
+end
+end)
 end
 end
 ------------------------------------------------------------------ keybind capture
 local KEY_SHORT = {
 RightControl = "R Ctrl", LeftControl = "L Ctrl", RightShift = "R Shift", LeftShift = "L Shift",
 RightAlt = "R Alt", LeftAlt = "L Alt", Space = "Space", Return = "Enter", Backspace = "Bksp",
-Tab = "Tab", CapsLock = "Caps",
+Tab = "Tab", CapsLock = "Caps", Delete = "Del", Insert = "Ins", Home = "Home", End = "End",
+PageUp = "PgUp", PageDown = "PgDn", Up = "↑", Down = "↓", Left = "←", Right = "→",
+Semicolon = ";", Quote = "'", Comma = ",", Period = ".", Slash = "/",
+LeftBracket = "[", RightBracket = "]", Backslash = "\\", Minus = "-", Equals = "=", Backquote = "`",
+One = "1", Two = "2", Three = "3", Four = "4", Five = "5", Six = "6", Seven = "7", Eight = "8", Nine = "9", Zero = "0",
+F1 = "F1", F2 = "F2", F3 = "F3", F4 = "F4", F5 = "F5", F6 = "F6", F7 = "F7", F8 = "F8", F9 = "F9", F10 = "F10", F11 = "F11", F12 = "F12",
 }
 local function keyName(k)
 if not k then return "—" end
@@ -1360,10 +1576,13 @@ local capturing = nil
 local function stopCapture(cancel)
 if not capturing then return end
 if capturing.timer then pcall(task.cancel, capturing.timer); capturing.timer = nil end
-if capturing.pulse then pcall(function() capturing.pulse:Cancel() end) end
+if capturing.pulse then pcall(function() capturing.pulse:Cancel() end); capturing.pulse = nil end
 if not cancel and capturing.button then capturing.button.Text = keyName(Binds[capturing.action]) end
 if capturing.button then
-pcall(function() capturing.button.UIStroke.Color = J.border end)
+pcall(function()
+local st = capturing.button.UIStroke
+if st then st.Color = J.border; st.Thickness = 1; st.Transparency = 0.3 end
+end)
 pcall(function() capturing.button.TextColor3 = J.text end)
 end
 capturing = nil
@@ -1371,50 +1590,65 @@ end
 local function startCapture(action, button)
 stopCapture(true)
 capturing = {action = action, button = button}
-button.Text = "press a key"; button.TextColor3 = J.gold
-pcall(function() button.UIStroke.Color = J.gold end)
-local tw = TweenSvc:Create(button, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, true), {BackgroundTransparency = 0.35})
+button.Text = "PRESS KEY…"; button.TextColor3 = J.gold
+pcall(function()
+local st = button.UIStroke
+if st then st.Color = J.gold; st.Thickness = 2; st.Transparency = 0 end
+end)
+-- 1.2s gold pulse loop on the stroke (TweenService)
+local st = button.UIStroke
+if st then
+local tw = TweenSvc:Create(st, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 0, -1), {Transparency = 0.7})
 capturing.pulse = tw
-capturing.timer = task.delay(6, function() stopCapture(true) end)
 pcall(function() tw:Play() end)
 end
------------------------------------------------------------------- log (pooled, max 50 rows)
-local LOG_MAX = 50
+capturing.timer = task.delay(6, function() stopCapture(true) end)
+end
+------------------------------------------------------------------ log (pooled, 200-row circular buffer)
+local LOG_MAX = 200
 local logPool = {}
 local logRowCount = 0
+local LOG_COL = {
+good = J.ok, warn = J.textGold, bad = J.dangerText, info = J.textSecondary,
+}
+local LOG_TICK = {
+good = J.ok, warn = J.gold, bad = J.danger, info = J.seriesIce,
+}
 local function guiLog(msg, kind)
 kind = kind or "info"
 if not gui.logFrame then print("[Jianghu] " .. tostring(msg)); return end
-local dotc = ({good = J.jade, warn = J.amber, bad = J.crimson, info = J.silver})[kind] or J.silver
+local col = LOG_COL[kind] or J.textSecondary
+local tickc = LOG_TICK[kind] or J.seriesIce
 local row
 -- reuse from pool or create new
 if #logPool > 0 then
 row = table.remove(logPool)
 else
-row = mk("Frame", {Size = UDim2.new(1,0,0,18), BackgroundTransparency = 1}, gui.logFrame)
+row = mk("Frame", {Size = UDim2.new(1,0,0,22), BackgroundTransparency = 1}, gui.logFrame)
 end
 row.Parent = gui.logFrame
 row.BackgroundTransparency = 1
 -- update existing children instead of creating new
-local dot = row:FindFirstChild("dot")
+local tick = row:FindFirstChild("tick")
 local ts = row:FindFirstChild("ts")
 local body = row:FindFirstChild("body")
-if not dot then
-dot = mk("Frame", {Name="dot", Size = UDim2.new(0,5,0,5), Position = UDim2.new(0,2,0,6.5), BorderSizePixel = 0}, row); corner(dot, 2.5)
-ts = mlabel({Name="ts", TextSize = 9, TextColor3 = J.disabled,
-Position = UDim2.new(0,14,0,0), Size = UDim2.new(0,58,1,0)}, row)
-body = label({Name="body", TextSize = 11, TextColor3 = J.silver,
-Position = UDim2.new(0,80,0,0), Size = UDim2.new(1,-84,1,0)}, row)
+if not tick then
+tick = mk("Frame", {Name="tick", Size = UDim2.new(0,3,0,3), Position = UDim2.new(0,0,0,9.5), BorderSizePixel = 0}, row); corner(tick, 2)
+ts = mlabel({Name="ts", TextSize = 10, TextColor3 = J.muted,
+Position = UDim2.new(0,12,0,0), Size = UDim2.new(0,56,1,0)}, row)
+body = label({Name="body", TextSize = 12, TextColor3 = J.textSecondary,
+Position = UDim2.new(0,76,0,0), Size = UDim2.new(1,-80,1,0)}, row)
 end
-dot.BackgroundColor3 = dotc
-dot.BackgroundTransparency = 1
+tick.BackgroundColor3 = tickc
+tick.BackgroundTransparency = 1
 ts.Text = os.date("%H:%M:%S")
 ts.TextTransparency = 1
 body.Text = tostring(msg)
+body.TextColor3 = col
 body.TextTransparency = 1
 logRowCount = logRowCount + 1
-pcall(function() TweenSvc:Create(dot,  TweenInfo.new(0.25), {BackgroundTransparency = 0}):Play() end)
-pcall(function() TweenSvc:Create(ts,   TweenInfo.new(0.25), {TextTransparency = 0}):Play() end)
+pcall(function() TweenSvc:Create(tick, TweenInfo.new(0.25), {BackgroundTransparency = 0}):Play() end)
+pcall(function() TweenSvc:Create(ts, TweenInfo.new(0.25), {TextTransparency = 0}):Play() end)
 pcall(function() TweenSvc:Create(body, TweenInfo.new(0.25), {TextTransparency = 0}):Play() end)
 if logRowCount > LOG_MAX then
 -- recycle oldest: move to pool instead of destroying
@@ -1447,23 +1681,26 @@ gui.statMode.Text  = State.mode .. (State.strategy == "Sequence" and " · SEQ" o
 gui.statTypes.Text = ("types %d/%d"):format(sel, #sorted)
 gui.statOk.Text    = ("harvested %d"):format(State.stats.harvested)
 gui.statOk.TextColor3   = State.stats.harvested > 0 and J.jade or J.silver
-gui.statForage.Text = ("forage L%d"):format(foragingLevel())
--- header chip
+	-- right cluster: "herbs 042 · nodes 128" — herbs = live instances, nodes = last full scan
+	local herbCount = 0
+	for _, l in pairs(State.byType) do herbCount = herbCount + #l end
+	gui.statForage.Text = ("herbs %03d · nodes %03d"):format(herbCount, State.lastScanNodes or 0)
+-- header chip (R-Pill automation state)
 if gui.chipDot and gui.chipText then
 local run = State.running
-local col = run and J.jade or J.silver
-gui.chipText.Text = run and "RUN" or "IDLE"
+local col = run and J.gold or J.muted
+gui.chipText.Text = run and "AUTO-HARVEST ON" or "PAUSED"
 gui.chipText.TextColor3 = col
 pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.2), {BackgroundColor3 = col}):Play() end)
 if run and not gui._chipPulsing then
 gui._chipPulsing = true
 task.spawn(function()
 while alive and State.running and gui.chipDot do
-pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.5, Size = UDim2.new(0,9,0,9)}):Play() end); task.wait(0.5)
-pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0, Size = UDim2.new(0,7,0,7)}):Play() end); task.wait(0.5)
+pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0.85, Size = UDim2.new(0,8,0,8)}):Play() end); task.wait(0.6)
+pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundTransparency = 0, Size = UDim2.new(0,6,0,6)}):Play() end); task.wait(0.6)
 end
 gui._chipPulsing = false
-if gui.chipDot then pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.25), {Size = UDim2.new(0,7,0,7), BackgroundTransparency = 0}):Play() end) end
+if gui.chipDot then pcall(function() TweenSvc:Create(gui.chipDot, TweenInfo.new(0.25), {Size = UDim2.new(0,6,0,6), BackgroundTransparency = 0}):Play() end) end
 end)
 end
 end
@@ -1472,64 +1709,52 @@ end
 local _goBusy = false
 local function herbCard(typeId)
 local locked = isTypeLocked(typeId)
-local card = mk("Frame", {Size = UDim2.new(1,0,0,56), BackgroundColor3 = J.charcoal, BorderSizePixel = 0, BackgroundTransparency = 1}, listFrame)
-corner(card, 6)
-local st = stroke(card, J.border, 1, 0.3)
-local acc = mk("Frame", {Size = UDim2.new(0,2,1,-14), Position = UDim2.new(0,0,0,7), BackgroundColor3 = J.jade, BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 2}, card); corner(acc, 1)
-local name = label({Text = typeId, TextSize = 13, TextColor3 = locked and J.silver or J.text,
-Position = UDim2.new(0,14,0,8), Size = UDim2.new(0.45,-10,0,18), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 2}, card)
-setWeight(name, Enum.FontWeight.Bold)
-local sub = label({Text = "", TextSize = 10, TextColor3 = J.silver,
-Position = UDim2.new(0,14,0,30), Size = UDim2.new(0.45,-10,0,16), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 2}, card)
-local lockGlyph = nil
-if locked then lockGlyph = makeLock(card); lockGlyph.Position = UDim2.new(0,14,0,31); lockGlyph.ZIndex = 2 end
-local pill = mk("Frame", {Size = UDim2.new(0,42,0,22), Position = UDim2.new(0.55,0,0.5,-11), BackgroundColor3 = J.midnight, BorderSizePixel = 0, ZIndex = 2}, card); corner(pill, 11)
-local count = mlabel({Text = "0", TextSize = 11, TextColor3 = J.text, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 3}, pill)
-local dist = mlabel({Text = "--", TextSize = 10, TextColor3 = J.silver, Position = UDim2.new(0.66,0,0,0), Size = UDim2.new(0.09,0,1,0), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2}, card)
--- custom SEL button (light gray default, green when selected)
-local sel = mk("TextButton", {Text = "SEL", Font = FONT_BODY, TextSize = 10,
-TextColor3 = J.text, BackgroundColor3 = Color3.fromRGB(55,55,65),
-Size = UDim2.new(0,50,0,30), Position = UDim2.new(1,-120,0.5,-15),
-AutoButtonColor = false, BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 2}, card)
-corner(sel, 5); stroke(sel, J.border, 1, 0.3)
-setWeight(sel, Enum.FontWeight.SemiBold)
-sel.MouseButton1Click:Connect(function()
+-- card 264x76 R2 BG-Surface + BW1 hairline, padding 12 (grid owns LayoutOrder)
+local card = mk("Frame", {Size = UDim2.new(0,264,0,76), BackgroundColor3 = J.surface, BorderSizePixel = 0, BackgroundTransparency = 0.35, ZIndex = 1}, listFrame)
+corner(card, R2)
+local st = stroke(card, J.border, 1, 0.35)
+mk("UIPadding", {PaddingTop = UDim.new(0,12), PaddingBottom = UDim.new(0,12), PaddingLeft = UDim.new(0,12), PaddingRight = UDim.new(0,12)}, card)
+-- icon tile 40x40 R1 Accent-Jade-Wash with first-letter glyph (SourceSans 16)
+local tile = mk("Frame", {Size = UDim2.new(0,40,0,40), Position = UDim2.new(0,12,0,12), BackgroundColor3 = J.jadeWash, BorderSizePixel = 0, ZIndex = 2}, card)
+corner(tile, R1)
+local glyph = label({Text = typeId:sub(1,1):upper(), TextSize = 16, TextColor3 = J.text, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 3}, tile)
+-- name (SourceSansSemibold 14)
+local name = label({Text = typeId, TextSize = 14, TextColor3 = J.text, Position = UDim2.new(0,64,0,14), Size = UDim2.new(0,124,0,18), TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 2}, card)
+setWeight(name, Enum.FontWeight.SemiBold)
+-- count mono 12 "xN" (ticker writes row.count.Text) / distance mono 12 right-aligned (row.dist.Text)
+local count = mlabel({Text = "\195\1510", TextSize = 12, TextColor3 = J.textSecondary, Position = UDim2.new(0,64,0,33), Size = UDim2.new(0,60,0,16), ZIndex = 2}, card)
+local dist = mlabel({Text = "--", TextSize = 12, TextColor3 = J.muted, Position = UDim2.new(0,190,0,14), Size = UDim2.new(0,46,0,16), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2}, card)
+-- gold "LOCK" micro-caption (SourceSans 10) replaces distance when locked
+local lockCap = label({Text = "LOCK", TextSize = 10, TextColor3 = J.gold, Position = UDim2.new(0,190,0,15), Size = UDim2.new(0,46,0,14), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2, Visible = false}, card)
+-- selected check: gold serif 11 in 18x18 top-right
+local check = mk("Frame", {Size = UDim2.new(0,18,0,18), Position = UDim2.new(1,-22,0,8), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 3, Visible = false}, card)
+dlabel({Text = "\226\156\147", TextSize = 11, TextColor3 = J.gold, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center}, check)
+-- progress bar 100%x4 at y=68: R-Pill BG-Sunken track + jade gradient fill (session progress)
+local pbar = mk("Frame", {Size = UDim2.new(1,-24,0,4), Position = UDim2.new(0,12,0,68), BackgroundColor3 = J.sunken, BorderSizePixel = 0, ZIndex = 1}, card)
+corner(pbar, RPILL)
+local pfill = mk("Frame", {Size = UDim2.new(0,0,1,0), Position = UDim2.new(0,0,0,0), BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 2}, pbar)
+corner(pfill, RPILL)
+grad(pfill, J.jade, J.jadeDk, 90)
+local function paintProgress()
+local frac = math.min(1, (State.stats.harvested or 0) / 100)
+pcall(function() TweenSvc:Create(pfill, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(frac,0,1,0)}):Play() end)
+end
+-- forward declarations so the click/hover closures capture the row-scoped locals
+local paintSel, refreshLocked
+-- full-cover click target: whole card toggles selection (locked = no click)
+local cardBtn = mk("TextButton", {Text = "", Font = FONT_BODY, TextSize = 1, BackgroundTransparency = 1, BorderSizePixel = 0, Size = UDim2.new(1,0,1,0), Position = UDim2.new(0,0,0,0), AutoButtonColor = false, ZIndex = 1, Active = not locked}, card)
+cardBtn.MouseButton1Click:Connect(function()
 if locked then if toast then toast(("%s needs foraging %d"):format(typeId, minMasteryFor(typeId)), "warn") end; return end
 State.selectedTypes[typeId] = not State.selectedTypes[typeId] or nil
 local on = State.selectedTypes[typeId] == true
--- set EVERYTHING explicitly — no relying on paintSel closure
-sel.BackgroundColor3 = on and J.jade or Color3.fromRGB(55,55,65)
-sel.TextColor3 = on and J.ink or J.text
-card.BackgroundColor3 = on and J.overlay or J.charcoal
-acc.BackgroundTransparency = (on or locked) and 0 or 1
-st.Color = on and J.jade or J.border
-st.Transparency = on and 0.2 or 0.3
-sub.Text = on and "farming all instances" or "select to farm all"
-sub.TextColor3 = on and J.jade or J.silver
+paintSel()
+refreshLocked()
 if updateStatus then updateStatus() end
 if toast then toast((on and "farming " or "dropped ") .. typeId, on and "good" or "info") end
 saveSettings()
 end)
--- SEL hover: default = brighter text; selected = darker text
-sel.MouseEnter:Connect(function()
-if locked then return end
-local on = State.selectedTypes[typeId] == true
-if on then
-TweenSvc:Create(sel, TweenInfo.new(0.12), {TextColor3 = Color3.fromRGB(10,10,10)}):Play()
-else
-TweenSvc:Create(sel, TweenInfo.new(0.12), {TextColor3 = J.jade}):Play()
-end
-end)
-sel.MouseLeave:Connect(function()
-if locked then return end
-local on = State.selectedTypes[typeId] == true
-if on then
-TweenSvc:Create(sel, TweenInfo.new(0.12), {TextColor3 = J.ink}):Play()
-else
-TweenSvc:Create(sel, TweenInfo.new(0.12), {TextColor3 = J.text}):Play()
-end
-end)
-local go = mkButton(card, {text = "GO", size = UDim2.new(0,50,0,30), pos = UDim2.new(1,-62,0.5,-15), kind = "primary", textSize = 10,
+-- GO: ghost/outline 32h, same tryHarvest path + _goBusy guard as before
+local go = mkButton(card, {text = "GO", size = UDim2.new(0,44,0,32), pos = UDim2.new(1,-54,1,-40), kind = "ghost", textSize = 11, zIndex = 3,
 onClick = function()
 if locked then return end
 local h = nearestInstanceOf(typeId)
@@ -1547,60 +1772,77 @@ end)
 _goBusy = false
 end)
 end})
-go.ZIndex = 2
-if locked then
-go.Active = false; go.TextColor3 = J.disabled; go.BackgroundColor3 = J.charcoal
-sel.Active = false; sel.TextColor3 = J.disabled
-end
-function paintSel()
+-- selected: BW2 jade stroke + jade wash + gold check; idle: BW1 hairline + surface
+paintSel = function()
 local on = State.selectedTypes[typeId] == true
-acc.BackgroundTransparency = (on or locked) and 0 or 1
-st.Color = on and J.jade or J.border
-st.Transparency = on and 0.2 or 0.3
--- set card background directly (no tween to avoid race conditions)
-card.BackgroundColor3 = on and J.overlay or J.charcoal
-card.BackgroundTransparency = 0
-if not locked then
--- SEL button: set directly, no tween (prevents reconcileList override)
-sel.BackgroundColor3 = on and J.jade or Color3.fromRGB(55,55,65)
-sel.TextColor3 = on and J.ink or J.text
+local sel = on and not locked
+st.Color = sel and J.jade or J.border
+st.Thickness = sel and 2 or 1
+st.Transparency = sel and 0 or 0.35
+card.BackgroundColor3 = sel and J.jadeWash or J.surface
+check.Visible = sel
 end
-if locked then
-sub.Text = ("locked  ·  Lv.%d"):format(minMasteryFor(typeId)); sub.TextColor3 = J.gold
-sub.Position = UDim2.new(0,30,0,30)
-else
-sub.Position = UDim2.new(0,14,0,30)
-sub.Text = on and "farming all instances" or "select to farm all"
-sub.TextColor3 = on and J.jade or J.silver
-end
-end
-local function refreshLocked()
+refreshLocked = function()
+local wasSel = State.selectedTypes[typeId] == true
 locked = isTypeLocked(typeId)
-name.TextColor3 = locked and J.silver or J.text
-if locked then State.selectedTypes[typeId] = nil end
+-- drop now-locked types from selection; persist the drop
+if locked and wasSel then
+State.selectedTypes[typeId] = nil
+if saveSettings then saveSettings() end
+end
+-- locked restyle: muted name, desaturated tile, gold LOCK caption, no input
+name.TextColor3 = locked and J.muted or J.text
+tile.BackgroundTransparency = locked and 0.6 or 0
+dist.Visible = not locked
+lockCap.Visible = locked
+cardBtn.Active = not locked
+go.Active = not locked
+go.TextColor3 = locked and J.disabled or J.textSecondary
+paintProgress()
 paintSel()
 end
-card.MouseEnter:Connect(function()
+-- hover: BG-Hover + Border-Hairline-2 stroke + 1px lift (lift only on unselected)
+cardBtn.MouseEnter:Connect(function()
 if locked then return end
-if not State.selectedTypes[typeId] then
--- hover lift only on unselected cards
-TweenSvc:Create(card, TweenInfo.new(0.12), {Position = UDim2.new(0,0,0,-1)}):Play()
+local on = State.selectedTypes[typeId] == true
+if not on then
+TweenSvc:Create(card, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = J.hover, Position = UDim2.new(0,0,0,-1)}):Play()
+TweenSvc:Create(st, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Color = J.hairline2}):Play()
 end
 end)
-card.MouseLeave:Connect(function()
-TweenSvc:Create(card, TweenInfo.new(0.12), {Position = UDim2.new(0,0,0,0)}):Play()
+cardBtn.MouseLeave:Connect(function()
+if locked then return end
+TweenSvc:Create(card, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0,0,0,0)}):Play()
 -- restore correct background (hover may have changed it)
 paintSel()
 end)
+paintProgress()
 paintSel()
-card.Position = UDim2.new(0,-8,0,0)
-TweenSvc:Create(card, TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-{BackgroundTransparency = 0, Position = UDim2.new(0,0,0,0)}):Play()
+TweenSvc:Create(card, TweenInfo.new(0.32, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {BackgroundTransparency = 0}):Play()
 return {frame = card, dist = dist, count = count, typeId = typeId, refreshLocked = refreshLocked, paintSel = paintSel}
 end
 local function setEmptyState(on)
-if not emptyState or not listFrame then return end
-emptyState.Visible = on; listFrame.Visible = not on
+if not emptyState then return end
+-- build the empty-state content once (idempotent via the ESBody marker)
+if emptyState:FindFirstChild("ESBody") == nil then
+for _, c in ipairs(emptyState:GetChildren()) do pcall(function() c:Destroy() end) end
+local esBody = mk("Frame", {Name = "ESBody", Size = UDim2.new(0,300,0,240), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundTransparency = 1}, emptyState)
+mk("UIListLayout", {FillDirection = Enum.FillDirection.Vertical, HorizontalAlignment = Enum.HorizontalAlignment.Center, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0,10), SortOrder = Enum.SortOrder.LayoutOrder}, esBody)
+-- seal: 64x64 outer jade hairline ring (R-Pill) + 8x8 dot pulsing 1.6s Quad Out loop
+local seal = mk("Frame", {Size = UDim2.new(0,64,0,64), BackgroundTransparency = 1, BorderSizePixel = 0, LayoutOrder = 1}, esBody)
+corner(seal, RPILL); stroke(seal, J.jade, 1, 0.25)
+local dot = mk("Frame", {Size = UDim2.new(0,8,0,8), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundColor3 = J.jade, BorderSizePixel = 0}, seal)
+corner(dot, RPILL)
+pcall(function() TweenSvc:Create(dot, TweenInfo.new(1.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, -1), {Size = UDim2.new(0,11,0,11)}):Play() end)
+dlabel({Text = "No herbs in reach", TextSize = 18, TextColor3 = J.text, Size = UDim2.new(0,300,0,24), TextXAlignment = Enum.TextXAlignment.Center, LayoutOrder = 2}, esBody)
+label({Text = "The field is quiet \226\128\148 reposition to begin", TextSize = 12, TextColor3 = J.muted, Size = UDim2.new(0,300,0,18), TextXAlignment = Enum.TextXAlignment.Center, LayoutOrder = 3}, esBody)
+gui.emptySub = mlabel({Text = "", TextSize = 10, TextColor3 = J.muted, Size = UDim2.new(0,300,0,16), TextXAlignment = Enum.TextXAlignment.Center, LayoutOrder = 4}, esBody)
+local rescan = mkButton(esBody, {text = "Rescan", size = UDim2.new(0,110,0,32), kind = "ghost", textSize = 12,
+onClick = function() if Scanner and Scanner.refresh then pcall(function() Scanner.refresh(true) end) end end})
+rescan.LayoutOrder = 5
+end
+emptyState.Visible = on
+if listFrame then listFrame.Visible = not on end
 if on and gui.emptySub then
 gui.emptySub.Text = ("last scan  ·  %d nodes  ·  %d herbs"):format(State.lastScanNodes, State.lastScanHerbs)
 end
@@ -1647,6 +1889,15 @@ if mb.grad then mb.grad.Enabled = on end
 TweenSvc:Create(mb.btn, TweenInfo.new(0.18), {BackgroundColor3 = on and J.jade or J.charcoal, TextColor3 = on and J.ink or J.silver}):Play()
 if mb.st then TweenSvc:Create(mb.st, TweenInfo.new(0.18), {Color = on and J.jadeDk or J.border}):Play() end
 end
+-- sidebar segmented thumb (modeButtons entries carry the shared seg; 0.15s Cubic Out)
+for _, mb in pairs(modeButtons) do
+if mb.seg and mb.seg.thumb and mb.seg.n and mb.seg.n > 0 then
+local idx = 1
+for i, v in ipairs(mb.seg.values) do if v == m then idx = i break end end
+TweenSvc:Create(mb.seg.thumb, TweenInfo.new(0.15, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Position = UDim2.new((idx-1)/mb.seg.n, 2, 0, 3)}):Play()
+break
+end
+end
 if settingsFrame and settingsFrame.Visible then pcall(function() refreshSettingsHighlight() end) end
 guiUpdateStatus()
 saveSettings()
@@ -1658,6 +1909,15 @@ local on = name == s
 if mb.grad then mb.grad.Enabled = on end
 TweenSvc:Create(mb.btn, TweenInfo.new(0.18), {BackgroundColor3 = on and J.jade or J.charcoal, TextColor3 = on and J.ink or J.silver}):Play()
 if mb.st then TweenSvc:Create(mb.st, TweenInfo.new(0.18), {Color = on and J.jadeDk or J.border}):Play() end
+end
+-- sidebar segmented thumb (strategyButtons entries carry the shared seg; 0.15s Cubic Out)
+for _, mb in pairs(strategyButtons) do
+if mb.seg and mb.seg.thumb and mb.seg.n and mb.seg.n > 0 then
+local idx = 1
+for i, v in ipairs(mb.seg.values) do if v == s then idx = i break end end
+TweenSvc:Create(mb.seg.thumb, TweenInfo.new(0.15, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Position = UDim2.new((idx-1)/mb.seg.n, 2, 0, 3)}):Play()
+break
+end
 end
 if settingsFrame and settingsFrame.Visible then pcall(function() refreshSettingsHighlight() end) end
 guiUpdateStatus()
@@ -1679,33 +1939,65 @@ if toast then toast("selected nearest types", "info") end
 saveSettings()
 end
 ------------------------------------------------------------------ window visibility / minimize
+local _hidePending = false
+local _entered = false  -- first show runs the content-zone entrance stagger (UX_SPEC §4)
+local setMinimized = nil  -- forward decl (defined below; called from setVisible restore-on-show)
 local function setVisible(v)
 if not main.frame then return end
 if v then
+-- restored on show: a minimized window comes back with its full layout
+if minimized then setMinimized(false) end
+-- show: fade + scale 0.96->1 (0.3s Cubic Out)
+_hidePending = false
 main.frame.Visible = true
-main.frame.Size = UDim2.new(0, CONFIG.WindowSize.X * 0.96, 0, CONFIG.WindowSize.Y * 0.96)
-TweenSvc:Create(main.frame, TweenInfo.new(0.28, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-{Size = UDim2.new(0, CONFIG.WindowSize.X, 0, CONFIG.WindowSize.Y),
-Position = UDim2.new(0.5, -CONFIG.WindowSize.X/2, 0.5, -CONFIG.WindowSize.Y/2)}):Play()
+main.frame.GroupTransparency = 1
+local sc = main.frame:FindFirstChildOfClass("UIScale")
+if sc then pcall(function() sc.Scale = 0.96 end) end
+TweenSvc:Create(main.frame, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
+if sc then pcall(function() TweenSvc:Create(sc, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Scale = 1}):Play() end) end
+-- content zones stagger: header/tabs/content/status fade in +0.04s apart (first show only, max 0.4s)
+if not _entered then
+_entered = true
+local zones = {headerFrame, tabsBar, content.frame, statusBar}
+for zi = 1, #zones do
+local zone = zones[zi]
+if zone then
+zone.GroupTransparency = 1
+task.delay(0.04 * zi, function()
+pcall(function()
+TweenSvc:Create(zone, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
+end)
+end)
+end
+end
+end
 else
-local tw = TweenSvc:Create(main.frame, TweenInfo.new(0.18, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-{Size = UDim2.new(0, CONFIG.WindowSize.X * 0.96, 0, CONFIG.WindowSize.Y * 0.96),
-Position = UDim2.new(0.5, -CONFIG.WindowSize.X/2 - 22, 0.5, -CONFIG.WindowSize.Y/2)})
-tw:Play(); tw.Completed:Connect(function() main.frame.Visible = false end)
+-- hide: fade 0.18s Quad In, then hide on completion (guarded against toggle races)
+local tw = TweenSvc:Create(main.frame, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {GroupTransparency = 1})
+_hidePending = true
+tw:Play()
+tw.Completed:Connect(function()
+if _hidePending and main.frame then main.frame.Visible = false end
+_hidePending = false
+end)
 end
 end
-local function setMinimized(v)
+setMinimized = function(v)
 minimized = v
 if not main.frame then return end
+local rh = main.frame:FindFirstChild("fkResizeHandle")
 if v then
+-- minimized = header only: keep the 64px header visible, hide tabs + content, drop the resize grip
 if content.frame then content.frame.Visible = false end
 if tabsBar then tabsBar.Visible = false end
-TweenSvc:Create(main.frame, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-{Size = UDim2.new(0, CONFIG.WindowSize.X, 0, 46)}):Play()
+if rh then rh.Visible = false end
+TweenSvc:Create(main.frame, TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+{Size = UDim2.new(0, CONFIG.WindowSize.X, 0, 66)}):Play()
 else
 if content.frame then content.frame.Visible = true end
 if tabsBar then tabsBar.Visible = true end
-TweenSvc:Create(main.frame, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+if rh then rh.Visible = true end
+TweenSvc:Create(main.frame, TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
 {Size = UDim2.new(0, CONFIG.WindowSize.X, 0, CONFIG.WindowSize.Y)}):Play()
 end
 end
@@ -1721,60 +2013,93 @@ for i, b in ipairs(info.labels) do
 TweenSvc:Create(b, TweenInfo.new(0.16), {TextColor3 = (i == idx) and J.ink or J.silver}):Play()
 end
 if info.thumb and n > 0 then
-TweenSvc:Create(info.thumb, TweenInfo.new(0.22, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
+TweenSvc:Create(info.thumb, TweenInfo.new(0.15, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
 {Position = UDim2.new((idx-1)/n, 2, 0, 3)}):Play()
 end
 end
 end
 local function segmented(parent, options, get, set)
-local trackF = mk("Frame", {Size = UDim2.new(1,0,0,30), BackgroundColor3 = J.charcoal, BorderSizePixel = 0}, parent)
-corner(trackF, 8); stroke(trackF, J.border, 1, 0.4)
+-- shell: R1 BG-Sunken BW1, height 30, width >= #labels x min 56 (parent fills that)
 local n = #options
+local trackF = mk("Frame", {Size = UDim2.new(1,0,0,30), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, parent)
+corner(trackF, R1); stroke(trackF, J.border, 1, 0.4)
+-- thumb: R1 jade identity fill (keeps refreshSettingsHighlight's J.ink active label legible) + Border-Hairline-2
 local thumb = mk("Frame", {Size = UDim2.new(1/n,-4,1,-6), Position = UDim2.new(0,2,0,3), BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 2}, trackF)
-corner(thumb, 6); grad(thumb, J.jade, J.jadeDk, 90)
+corner(thumb, R1); grad(thumb, J.jade, J.jadeDk, 90); stroke(thumb, J.hairline2, 1, 0.3)
+-- tween Size too when segment count changes (refreshSettingsHighlight owns Position only)
+if n > 0 then
+TweenSvc:Create(thumb, TweenInfo.new(0.15, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out),
+{Size = UDim2.new(1/n,-4,1,-6)}):Play()
+end
 local labels, values = {}, {}
 for i, o in ipairs(options) do
 local val, disp
 if type(o) == "table" then val = (o.val ~= nil and o.val) or o[1]; disp = o.disp or tostring(val)
 else val = o; disp = tostring(o) end
 values[i] = val
-local b = mk("TextButton", {Text = disp, Font = FONT_BODY, TextSize = 11, TextColor3 = J.silver,
-BackgroundTransparency = 1, Position = UDim2.new((i-1)/n,0,0,0), Size = UDim2.new(1/n,0,1,0),
+local b = mk("TextButton", {Text = disp, Font = FONT_BODY, TextSize = 12, TextColor3 = J.silver,
+TextTruncate = Enum.TextTruncate.AtEnd, BackgroundTransparency = 1,
+Position = UDim2.new((i-1)/n,0,0,0), Size = UDim2.new(1/n,0,1,0),
 ZIndex = 3, AutoButtonColor = false}, trackF)
 setWeight(b, Enum.FontWeight.SemiBold)
 labels[i] = b
+-- hover lift on idle labels only (active label is J.ink via refreshSettingsHighlight)
+b.MouseEnter:Connect(function()
+if get() ~= val then TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.text}):Play() end
+end)
+b.MouseLeave:Connect(function()
+if get() ~= val then TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.silver}):Play() end
+end)
 b.MouseButton1Click:Connect(function() set(val); refreshSettingsHighlight(); saveSettings() end)
 end
 return {thumb = thumb, labels = labels, values = values, getter = get, n = n}
 end
-local function toggleSwitch(parent, get, set)
-local trackB = mk("TextButton", {Text = "", BackgroundColor3 = J.raised, Size = UDim2.new(0,46,0,26), AutoButtonColor = false}, parent)
-corner(trackB, 13); stroke(trackB, J.border, 1, 0.4)
-local knob = mk("Frame", {Size = UDim2.new(0,20,0,20), Position = get() and UDim2.new(1,-23,0.5,-10) or UDim2.new(0,3,0.5,-10), BackgroundColor3 = J.text, BorderSizePixel = 0}, trackB)
-corner(knob, 10)
+local function toggleSwitch(parent, get, set, disabledGetter)
+-- 40x22 R-Pill: track BG-Sunken BW1, ON = Accent-Jade; thumb 16x16 paper + Border-Hairline-2
+local trackB = mk("TextButton", {Text = "", BackgroundColor3 = J.sunken, Size = UDim2.new(0,40,0,22), AutoButtonColor = false}, parent)
+corner(trackB, RPILL); stroke(trackB, J.border, 1, 0.4)
+-- knob MUST be the first Frame child (consumed by _tweenToggleKnob)
+local knob = mk("Frame", {Name = "knob", Size = UDim2.new(0,16,0,16), Position = UDim2.new(0,3,0.5,-8), BackgroundColor3 = J.paper, BorderSizePixel = 0, ZIndex = 2}, trackB)
+corner(knob, RPILL); stroke(knob, J.hairline2, 1, 0.35)
+local knobTw = nil
 local function paint()
-if get() then
-trackB.BackgroundColor3 = J.jadeDk
-if not trackB:FindFirstChild("tg") then local g = grad(trackB, J.jade, J.jadeDk, 90); g.Name = "tg" end
+local on = get() and true or false
+local disabled = disabledGetter and disabledGetter() or false
+-- thumb Position with RETARGET: cancel in-flight tween, tween from current (0.16s Quad Out)
+if knobTw then pcall(function() knobTw:Cancel() end); knobTw = nil end
+knobTw = TweenSvc:Create(knob, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+{Position = on and UDim2.new(0,21,0.5,-8) or UDim2.new(0,3,0.5,-8)})
+pcall(function() knobTw:Play() end)
+-- track color tween 0.12s; "tg" gradient present only when ON (named for _tweenToggleKnob)
+TweenSvc:Create(trackB, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+{BackgroundColor3 = disabled and J.raised or (on and J.jade or J.sunken)}):Play()
+local g = trackB:FindFirstChild("tg")
+if on and not disabled then
+if not g then g = grad(trackB, J.jade, J.jadeDk, 90); if g then g.Name = "tg" end end
 else
-trackB.BackgroundColor3 = J.raised
-local g = trackB:FindFirstChild("tg"); if g then g:Destroy() end
+if g then g:Destroy() end
 end
-TweenSvc:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-{Position = get() and UDim2.new(1,-23,0.5,-10) or UDim2.new(0,3,0.5,-10)}):Play()
+-- thumb fill: paper when enabled, muted when disabled
+TweenSvc:Create(knob, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+{BackgroundColor3 = disabled and J.muted or J.paper}):Play()
 end
 paint()
-trackB.MouseButton1Click:Connect(function() set(not get()); paint(); saveSettings() end)
+trackB.MouseButton1Click:Connect(function()
+if disabledGetter and disabledGetter() then return end
+set(not get()); paint(); saveSettings()
+end)
 return trackB
 end
 local function keybindRow(parent, action, text)
-local row = mk("Frame", {Size = UDim2.new(1,0,0,40), BackgroundTransparency = 1}, parent)
-local lbl = label({Text = text, TextSize = 13, TextColor3 = J.text,
-Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-140,1,0), AutomaticSize = Enum.AutomaticSize.X}, row)
-local chip = mk("TextButton", {Text = keyName(Binds[action]), Font = FONT_MONO, TextSize = 12,
-TextColor3 = J.text, BackgroundColor3 = J.raised, Size = UDim2.new(0,110,0,28),
-Position = UDim2.new(1,-120,0.5,-16), AutoButtonColor = false}, row)
-corner(chip, 6); stroke(chip, J.border, 1, 0.3)
+-- chip 64x24 R1 BG-Sunken mono 11; capture state driven by startCapture/stopCapture (chunk-1 wiring kept)
+local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, parent)
+label({Text = text, TextSize = 13, TextColor3 = J.text,
+Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-96,1,0), AutomaticSize = Enum.AutomaticSize.X,
+TextYAlignment = Enum.TextYAlignment.Center}, row)
+local chip = mk("TextButton", {Text = keyName(Binds[action]), Font = FONT_MONO, TextSize = 11,
+TextColor3 = J.text, BackgroundColor3 = J.sunken, Size = UDim2.new(0,64,0,24),
+Position = UDim2.new(1,-72,0.5,-12), AutoButtonColor = false}, row)
+corner(chip, R1); stroke(chip, J.border, 1, 0.3)
 chip.MouseEnter:Connect(function() if not capturing then pcall(function() chip.UIStroke.Color = J.gold end) end end)
 chip.MouseLeave:Connect(function() if not capturing then pcall(function() chip.UIStroke.Color = J.border end) end end)
 bindButtons[action] = chip
@@ -1784,105 +2109,167 @@ end
 ------------------------------------------------------------------ settings panel
 dbg("settings panel")
 local function buildSettings()
-settingsFrame = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 10}, content.frame)
-local panel = mk("Frame", {Size = UDim2.new(1,0,1,0), Position = UDim2.new(0,0,0,0),
-BackgroundColor3 = J.midnight, BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 11}, settingsFrame)
+-- scrim layer: black 0.65 after open fade (0.18s Linear); click on scrim closes
+settingsFrame = mk("TextButton", {Text = "", Size = UDim2.new(1,0,1,0), BackgroundColor3 = J.scrim,
+BackgroundTransparency = 1, AutoButtonColor = false, ZIndex = 10}, content.frame)
+settingsFrame.MouseButton1Click:Connect(closeSettings)
+-- panel card: R3 BG-Surface BW1, scale 0.98 -> 1 + fade handled by openSettings
+local panel = mk("Frame", {Size = UDim2.new(1,-48,1,-48), Position = UDim2.new(0.5,0,0.5,0),
+AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = J.surface, BackgroundTransparency = 0,
+BorderSizePixel = 0, ClipsDescendants = true, ZIndex = 11}, settingsFrame)
+corner(panel, R3); stroke(panel, J.border, 1, 0.4)
+local us = mk("UIScale", {}, panel); us.Scale = 0.98
 gui.settingsPanel = panel
-local head = mk("Frame", {Size = UDim2.new(1,0,0,44), BackgroundColor3 = J.charcoal, BorderSizePixel = 0, ZIndex = 12}, panel)
-local back = mk("TextButton", {Text = "‹", Font = FONT_BODY, TextSize = 22, TextColor3 = J.silver,
-BackgroundTransparency = 1, Size = UDim2.new(0,42,1,0), Position = UDim2.new(0,4,0,0), AutoButtonColor = false, ZIndex = 13}, head)
-back.MouseEnter:Connect(function() TweenSvc:Create(back, TweenInfo.new(0.12), {TextColor3 = J.gold}):Play() end)
-back.MouseLeave:Connect(function() TweenSvc:Create(back, TweenInfo.new(0.12), {TextColor3 = J.silver}):Play() end)
+-- header
+local head = mk("Frame", {Size = UDim2.new(1,0,0,48), BackgroundColor3 = J.surface, BorderSizePixel = 0, ZIndex = 12}, panel)
+local back = mk("TextButton", {Text = "‹", Font = FONT_BODY, TextSize = 22, TextColor3 = J.textSecondary,
+BackgroundTransparency = 1, Size = UDim2.new(0,36,0,36), Position = UDim2.new(0,8,0,6), AutoButtonColor = false, ZIndex = 13}, head)
+corner(back, R1); stroke(back, J.border, 1, 0.3)
+back.MouseEnter:Connect(function() TweenSvc:Create(back, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.gold}):Play() end)
+back.MouseLeave:Connect(function() TweenSvc:Create(back, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.textSecondary}):Play() end)
 back.MouseButton1Click:Connect(closeSettings)
-dlabel({Text = "Settings", TextSize = 17, TextColor3 = J.text, Position = UDim2.new(0,46,0,0), Size = UDim2.new(0.6,0,1,0), ZIndex = 13}, head)
-divider(head, UDim2.new(0,0,1,-1))
-local scroll = mk("ScrollingFrame", {Position = UDim2.new(0,20,0,56), Size = UDim2.new(1,-40,1,-76),
-BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 5, ScrollBarImageColor3 = J.border,
+dlabel({Text = "Settings", TextSize = 20, TextColor3 = J.text, Position = UDim2.new(0,56,0,0), Size = UDim2.new(0.6,0,1,0), ZIndex = 13}, head)
+hairlineFade(head, UDim2.new(0,0,1,-1), false, J.border)
+-- scroll
+local scroll = mk("ScrollingFrame", {Position = UDim2.new(0,24,0,64), Size = UDim2.new(1,-48,1,-88),
+BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = J.border,
 CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 12}, panel)
-local layout = mk("UIListLayout", {Padding = UDim.new(0,8), SortOrder = Enum.SortOrder.LayoutOrder}, scroll)
-mk("UIPadding", {PaddingTop = UDim.new(0,8), PaddingBottom = UDim.new(0,16)}, scroll)
+mk("UIListLayout", {Padding = UDim.new(0,10), SortOrder = Enum.SortOrder.LayoutOrder}, scroll)
+mk("UIPadding", {PaddingTop = UDim.new(0,12), PaddingBottom = UDim.new(0,20)}, scroll)
 gui.settingsScroll = scroll
--- KEYBINDS
-sectionHead(scroll, "Keybinds", "click a chip, press a key  ·  Esc cancels")
-keybindRow(scroll, "toggle", "Toggle window")
-keybindRow(scroll, "start",  "Start automation")
-keybindRow(scroll, "stop",   "Stop automation")
-divider(scroll, UDim2.new(0,0,0,0)) -- placeholder; real spacing via list padding
--- DISPLAY
-sectionHead(scroll, "Display")
-local trow = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
-label({Text = "Toast notifications", TextSize = 13, TextColor3 = J.text,
-Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-60,1,0), AutomaticSize = Enum.AutomaticSize.X}, trow)
-local tg = toggleSwitch(trow, function() return CONFIG.ShowToasts end, function(v) CONFIG.ShowToasts = v end)
-tg.Position = UDim2.new(1,-46,0.5,-13)
--- CULTIVATION (auto-bt synced with Stats tab engine)
-sectionHead(scroll, "Cultivation", "automatic breakthrough control")
+-- STRATEGY group
+sectionHead(scroll, "Strategy", "how the harvest picks herbs")
+local function segRow(lblText, opts, get, set)
+local wrap = mk("Frame", {Size = UDim2.new(1,0,0,52), BackgroundTransparency = 1}, scroll)
+label({Text = lblText, TextSize = 12, TextColor3 = J.textSecondary, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,0,18)}, wrap)
+setWeight(wrap:FindFirstChildOfClass("TextLabel"), Enum.FontWeight.SemiBold)
+local trackHolder = mk("Frame", {Size = UDim2.new(1,0,0,30), Position = UDim2.new(0,0,0,22), BackgroundTransparency = 1}, wrap)
+return segmented(trackHolder, opts, get, set)
+end
+settingsSegs.mode = segRow("Mode", {"Walk","Tween","Teleport","Adaptive"}, function() return State.mode end, setMode)
+settingsSegs.strategy = segRow("Strategy", {"Nearest","Sequence"}, function() return State.strategy end, setStrategy)
+-- HARVEST group
+sectionHead(scroll, "Harvest", "movement + anti-cheat settle")
+local function sliderRow(lblText, subText, get, set, lo, hi, fmt)
+local wrap = mk("Frame", {Size = UDim2.new(1,0,0,44), BackgroundTransparency = 1}, scroll)
+label({Text = lblText, TextSize = 13, TextColor3 = J.text, Position = UDim2.new(0,0,0,0),
+Size = UDim2.new(1,-236,1,0), AutomaticSize = Enum.AutomaticSize.X, TextYAlignment = Enum.TextYAlignment.Center}, wrap)
+if subText then
+label({Text = subText, TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(0,0,0,22), Size = UDim2.new(1,-236,0,14)}, wrap)
+end
+-- value RobotoMono 12 right-aligned
+local valLbl = mlabel({Text = fmt(get()), TextSize = 12, TextColor3 = J.textGold,
+Position = UDim2.new(1,-68,0,0), Size = UDim2.new(0,64,1,0), TextXAlignment = Enum.TextXAlignment.Right,
+TextYAlignment = Enum.TextYAlignment.Center}, wrap)
+-- track 160x4 R-Pill BG-Sunken, fill Accent-Jade gradient, thumb 16x16 paper + Accent-Gold ring
+local track = mk("Frame", {Size = UDim2.new(0,160,0,4), Position = UDim2.new(1,-216,0.5,-2), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, wrap)
+corner(track, RPILL); stroke(track, J.border, 1, 0.3)
+local fill = mk("Frame", {Size = UDim2.new(0,0,1,0), BackgroundColor3 = J.jade, BorderSizePixel = 0}, track)
+corner(fill, RPILL); grad(fill, J.jade, J.jadeDk, 90)
+local thumb = mk("Frame", {Size = UDim2.new(0,16,0,16), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0,0,0.5,0), BackgroundColor3 = J.paper, BorderSizePixel = 0, ZIndex = 2}, track)
+corner(thumb, RPILL); stroke(thumb, J.gold, 1, 0.2)
+-- drag 1:1, step 0.1
+local function snap(f)
+f = math.clamp(f, 0, 1)
+local v = math.floor((lo + f * (hi - lo)) * 10 + 0.5) / 10
+f = (v - lo) / (hi - lo)
+fill.Size = UDim2.new(f, 0, 1, 0)
+thumb.Position = UDim2.new(f, 0, 0.5, 0)
+valLbl.Text = fmt(v)
+set(v)
+saveSettings()
+end
+local function paint()
+local v = math.clamp(get(), lo, hi)
+local f = (v - lo) / (hi - lo)
+fill.Size = UDim2.new(f, 0, 1, 0)
+thumb.Position = UDim2.new(f, 0, 0.5, 0)
+valLbl.Text = fmt(v)
+end
+paint()
+local dragging = false
+local function dragFrom(pos)
+local abs = track.AbsolutePosition
+local w = track.AbsoluteSize.X
+if w <= 0 then return end
+snap((pos.X - abs.X) / w)
+end
+wrap.Active = true
+wrap.InputBegan:Connect(function(inp)
+if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+dragging = true
+dragFrom(inp.Position)
+end
+end)
+wrap.InputChanged:Connect(function(inp)
+if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+dragFrom(inp.Position)
+end
+end)
+wrap.InputEnded:Connect(function(inp)
+if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = false end
+end)
+return wrap
+end
+sliderRow("Move speed", "walkspeed range 8-40", function() return CONFIG.WalkSpeed end,
+function(v) CONFIG.WalkSpeed = v end, 8, 40, function(v) return tostring(v) end)
+sliderRow("Settle time", "dwell range 0.2s-10s", function() return CONFIG.Dwell end,
+function(v) CONFIG.Dwell = v end, 0.2, 10, function(v) return ("%.1fs"):format(v) end)
+-- no-op entries so refreshSettingsHighlight keeps the settingsSegs shape (sliders paint themselves)
+settingsSegs.speed = {thumb = nil, labels = {}, values = {}, getter = function() return CONFIG.WalkSpeed end, n = 0}
+settingsSegs.dwell = {thumb = nil, labels = {}, values = {}, getter = function() return CONFIG.Dwell end, n = 0}
+-- BREAKTHROUGH group
+sectionHead(scroll, "Breakthrough", "automatic breakthrough control")
 -- row: AUTO-BT master toggle (Qi-safe)
 do local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
 	label({Text = "Auto-Breakthrough (Qi-safe)", TextSize = 13, TextColor3 = J.text,
-	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-60,1,0), AutomaticSize = Enum.AutomaticSize.X,
+	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-52,1,0), AutomaticSize = Enum.AutomaticSize.X,
 	TextYAlignment = Enum.TextYAlignment.Center}, row)
 	local qiTm = toggleSwitch(row,
 		function() return autoBt.enabled end,
 		function(v) autoBt.enabled = v
 			if v then autoBt.bootTime = os.clock(); autoBt.lastFire = tick() end
 		end)
-	qiTm.Position = UDim2.new(1,-46,0.5,-13)
+	qiTm.Position = UDim2.new(1,-40,0.5,-11)
 end
 -- row: BODY Auto-Breakthrough (lethal — confirm-gated via setter overlay)
 do local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
+	-- hoisted: the setter closure below captures bodyTg, so the local must be declared first
+	local bodyTg = nil
 	label({Text = "Body Auto-Breakthrough", TextSize = 13, TextColor3 = J.text,
-	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-180,1,0), AutomaticSize = Enum.AutomaticSize.X,
+	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-220,1,0), AutomaticSize = Enum.AutomaticSize.X,
 	TextYAlignment = Enum.TextYAlignment.Center}, row)
-	local warnLbl = label({Text = "(lethal — can die!)", TextSize = 11, TextColor3 = J.crimson,
-	Position = UDim2.new(0,150,0,0), Size = UDim2.new(0,120,1,0),
+	label({Text = "(lethal — can die!)", TextSize = 11, TextColor3 = J.dangerText,
+	Position = UDim2.new(0,170,0,0), Size = UDim2.new(0,130,1,0),
 	TextYAlignment = Enum.TextYAlignment.Center}, row)
-	local bodyTg = toggleSwitch(row,
+	bodyTg = toggleSwitch(row,
 		function() return autoBt.bodyEnabled end,
 		function(v) _setBodyBtWithConfirm(v, bodyTg) end)
-	bodyTg.Position = UDim2.new(1,-46,0.5,-13)
+	bodyTg.Position = UDim2.new(1,-40,0.5,-11)
 end
--- MOVEMENT
-sectionHead(scroll, "Movement", "higher settle = safer vs anti-cheat")
-local function segRow(lblText, opts, get, set)
-local wrap = mk("Frame", {Size = UDim2.new(1,0,0,48), BackgroundTransparency = 1}, scroll)
-label({Text = lblText, TextSize = 11, TextColor3 = J.silver, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,0,16)}, wrap)
-local trackHolder = mk("Frame", {Size = UDim2.new(1,0,0,30), Position = UDim2.new(0,0,0,20), BackgroundTransparency = 1}, wrap)
-local seg = segmented(trackHolder, opts, get, set)
-seg.thumb.Parent = trackHolder:FindFirstChildOfClass("Frame") or seg.thumb.Parent
-return seg
+-- INTERFACE group
+sectionHead(scroll, "Interface", "toasts, startup, keybinds")
+do local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
+	label({Text = "Toast notifications", TextSize = 13, TextColor3 = J.text,
+	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-52,1,0), AutomaticSize = Enum.AutomaticSize.X,
+	TextYAlignment = Enum.TextYAlignment.Center}, row)
+	local tg = toggleSwitch(row, function() return CONFIG.ShowToasts end, function(v) CONFIG.ShowToasts = v end)
+	tg.Position = UDim2.new(1,-40,0.5,-11)
 end
-settingsSegs.mode  = segRow("Mode", {"Walk","Tween","Teleport","Adaptive"}, function() return State.mode end, setMode)
-settingsSegs.speed = segRow("Move speed", {{val=12,disp="12"},{val=16,disp="16"},{val=20,disp="20"},{val=24,disp="24"}},
-function() return CONFIG.WalkSpeed end, function(v) CONFIG.WalkSpeed = v end)
-settingsSegs.dwell = segRow("Settle", {{val=0.6,disp="0.6s"},{val=1.2,disp="1.2s"},{val=2.0,disp="2.0s"},{val=3.0,disp="3.0s"}},
-function() return CONFIG.Dwell end, function(v) CONFIG.Dwell = v end)
--- DANGER
-sectionHead(scroll, "Danger", nil, J.crimson)
-local ub = mk("TextButton", {Text = "Unload Script", Font = FONT_BODY, TextSize = 13,
-TextColor3 = J.ink, BackgroundColor3 = J.crimson, Size = UDim2.new(1,0,0,40),
-AutoButtonColor = false, BackgroundTransparency = 0, BorderSizePixel = 0}, scroll)
-setWeight(ub, Enum.FontWeight.Bold); corner(ub, 8)
-local ubSt = stroke(ub, J.crimsonDk, 1, 0.3)
-grad(ub, J.crimson, Color3.fromRGB(180,30,30), 90)
-local armed = false
-ub.MouseEnter:Connect(function() TweenSvc:Create(ub, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(240,50,50)}):Play() end)
-ub.MouseLeave:Connect(function() TweenSvc:Create(ub, TweenInfo.new(0.15), {BackgroundColor3 = J.crimson}):Play() end)
-ub.MouseButton1Click:Connect(function()
-if not armed then
-armed = true; ub.Text = "Click again to confirm"
-TweenSvc:Create(ub, TweenInfo.new(0.15), {BackgroundColor3 = J.amber, TextColor3 = J.ink}):Play()
-task.delay(2.4, function()
-if armed then armed = false; ub.Text = "Unload Script"
-TweenSvc:Create(ub, TweenInfo.new(0.15), {BackgroundColor3 = J.crimson}):Play()
-end end)
-else
-destroy()
+do local row = mk("Frame", {Size = UDim2.new(1,0,0,36), BackgroundTransparency = 1}, scroll)
+	label({Text = "Auto-start on load", TextSize = 13, TextColor3 = J.text,
+	Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-52,1,0), AutomaticSize = Enum.AutomaticSize.X,
+	TextYAlignment = Enum.TextYAlignment.Center}, row)
+	local ast = toggleSwitch(row, function() return CONFIG.AutoStart end,
+		function(v) persistAutoStart(v); saveSettings() end)
+	ast.Position = UDim2.new(1,-40,0.5,-11)
 end
-end)
+keybindRow(scroll, "toggle", "Toggle window")
+keybindRow(scroll, "start",  "Start automation")
+keybindRow(scroll, "stop",   "Stop automation")
 -- UPDATE SCRIPT
-sectionHead(scroll, "Update", nil, J.gold)
-local updateBtn = mkButton(scroll, {text = "Update Script from GitHub", size = UDim2.new(1,0,0,40), kind = "secondary", textSize = 12, radius = 6,
+sectionHead(scroll, "Update", "self-update from GitHub", J.gold)
+local updateBtn = mkButton(scroll, {text = "Update Script from GitHub", size = UDim2.new(1,0,0,36), kind = "outline", textSize = 12, radius = R1,
 onClick = function()
 if toast then toast("fetching latest version...", "info") end
 task.spawn(function()
@@ -1907,11 +2294,42 @@ if toast then toast("update rejected: payload failed integrity check", "bad") en
 end
 end)
 end})
+-- DANGER
+sectionHead(scroll, "Danger", "irreversible", J.dangerText)
+local armed = false
+local ub = mk("TextButton", {Text = "Unload Script", Font = FONT_BODY, TextSize = 13,
+TextColor3 = J.onAccent, BackgroundColor3 = J.dangerBtn, Size = UDim2.new(1,0,0,36),
+AutoButtonColor = false, BackgroundTransparency = 0, BorderSizePixel = 0}, scroll)
+setWeight(ub, Enum.FontWeight.SemiBold); corner(ub, R1); stroke(ub, J.hairline, 1, 0.35)
+ub.MouseEnter:Connect(function() TweenSvc:Create(ub, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = Color3.fromRGB(222,102,102)}):Play() end)
+ub.MouseLeave:Connect(function() TweenSvc:Create(ub, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = armed and J.amber or J.dangerBtn}):Play() end)
+ub.MouseButton1Click:Connect(function()
+if not armed then
+armed = true; ub.Text = "Click again to confirm"
+TweenSvc:Create(ub, TweenInfo.new(0.15), {BackgroundColor3 = J.amber, TextColor3 = J.ink}):Play()
+task.delay(2.4, function()
+if armed then armed = false; ub.Text = "Unload Script"
+TweenSvc:Create(ub, TweenInfo.new(0.15), {BackgroundColor3 = J.dangerBtn, TextColor3 = J.onAccent}):Play()
+end end)
+else
+destroy()
+end
+end)
 refreshSettingsHighlight()
 end
 function openSettings()
+-- settings sits inside content.frame: a minimized window must restore its layout first
+if minimized then setMinimized(false) end
 if not settingsFrame then buildSettings() end
 preSettingsTab = activeTab  -- remember which tab we were on
+-- reset panel state while hidden (no flash on reveal)
+if gui.settingsPanel then
+gui.settingsPanel.Position = UDim2.new(0.5,0,0.5,0)
+gui.settingsPanel.BackgroundTransparency = 0
+gui.settingsPanel.GroupTransparency = 1
+local us = gui.settingsPanel:FindFirstChildOfClass("UIScale")
+if us then us.Scale = 0.98 end
+end
 -- hide main content, show settings
 if harvestSidebar then harvestSidebar.Visible = false end
 if harvestContent then harvestContent.Visible = false end
@@ -1920,12 +2338,13 @@ if emptyState then emptyState.Visible = false end
 if listFrame then listFrame.Visible = false end
 settingsFrame.Visible = true
 if gui.settingsScroll then gui.settingsScroll.CanvasPosition = Vector2.new(0,0) end
+-- scrim fade 0.18s Linear (settings scrim 0.65)
+TweenSvc:Create(settingsFrame, TweenInfo.new(0.18, Enum.EasingStyle.Linear), {BackgroundTransparency = 0.35}):Play()
+-- panel: scale 0.98 -> 1 + fade, 0.22s Cubic Out
 if gui.settingsPanel then
-gui.settingsPanel.Position = UDim2.new(0,0,0.05,0)
-gui.settingsPanel.Size = UDim2.new(1,0,0.95,0)
-gui.settingsPanel.BackgroundTransparency = 1
-TweenSvc:Create(gui.settingsPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.Out),
-{Position = UDim2.new(0,0,0,0), BackgroundTransparency = 0}):Play()
+TweenSvc:Create(gui.settingsPanel, TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {GroupTransparency = 0}):Play()
+local us = gui.settingsPanel:FindFirstChildOfClass("UIScale")
+if us then TweenSvc:Create(us, TweenInfo.new(0.22, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Scale = 1}):Play() end
 end
 refreshSettingsHighlight()
 end
@@ -1937,13 +2356,14 @@ if _bodyConfirmOverlay and _bodyConfirmOverlay.Parent then
 _bodyConfirmOverlay.Visible = false
 end
 if gui.settingsPanel then
--- smooth fade out + slide down
-local tw = TweenSvc:Create(gui.settingsPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quart, Enum.EasingDirection.In),
-{BackgroundTransparency = 1, Position = UDim2.new(0,0,0.03,0)})
+-- fade scrim (0.18s Linear) + panel out (0.18s Quad In), restore on completion
+local tw = TweenSvc:Create(settingsFrame, TweenInfo.new(0.18, Enum.EasingStyle.Linear), {BackgroundTransparency = 1})
+TweenSvc:Create(gui.settingsPanel, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {GroupTransparency = 1}):Play()
 tw:Play(); tw.Completed:Connect(function()
 settingsFrame.Visible = false
 gui.settingsPanel.Position = UDim2.new(0,0,0,0)
 gui.settingsPanel.BackgroundTransparency = 0
+gui.settingsPanel.GroupTransparency = 0
 -- restore the tab we were on before settings
 if preSettingsTab and tabPages[preSettingsTab] then
 switchTab(preSettingsTab)
@@ -1972,42 +2392,59 @@ end
 end
 ------------------------------------------------------------------ build overlays
 local function buildOverlays()
+guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
+IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
+lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui"))
 toastHolder = mk("ScreenGui", {Name = "ForageKitToasts", ResetOnSpawn = false,
 IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
 lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui"))
 end
 ------------------------------------------------------------------ build window
 local function buildHeader(parent)
-local header = mk("Frame", {Size = UDim2.new(1,0,0,46), BackgroundColor3 = J.charcoal, BorderSizePixel = 0, ZIndex = 3}, parent)
-grad(header, J.charcoal, J.midnight, 90)
-divider(header, UDim2.new(0,0,1,-1))  -- gold-fade hairline under header
-makeJadeIcon(header):Clone().Parent = nil -- noop guard
-local icon = makeJadeIcon(header); icon.Position = UDim2.new(0,16,0,11)
-dlabel({Text = "The Jianghu Menu", TextSize = 18, TextColor3 = J.text,
-Position = UDim2.new(0,48,0,0), Size = UDim2.new(0.5,0,1,0), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 4}, header)
-mlabel({Text = "v5.13", TextSize = 9, TextColor3 = J.disabled,
-Position = UDim2.new(0.5,0,0,0), Size = UDim2.new(0,100,1,0), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 4}, header)
--- status chip
-local chip = mk("Frame", {Size = UDim2.new(0,60,0,22), Position = UDim2.new(1,-186,0.5,-11), BackgroundColor3 = J.raised, BorderSizePixel = 0, ZIndex = 4}, header)
-corner(chip, 11); stroke(chip, J.border, 1, 0.3)
-gui.chipDot = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,8,0.5,-3), BackgroundColor3 = J.silver, BorderSizePixel = 0, ZIndex = 5}, chip); corner(gui.chipDot, 3)
-gui.chipText = mlabel({Text = "IDLE", TextSize = 9, TextColor3 = J.silver, Position = UDim2.new(0,20,0,0), Size = UDim2.new(1,-26,1,0), ZIndex = 5}, chip)
-local gear = makeGear(header); gear.Position = UDim2.new(1,-112,0,8); gear.ZIndex = 4
+-- shell header 100%x64 BG-Surface (UX_SPEC §5): seal + wordmark + caption + version chip + right cluster + accent line
+local header = mk("Frame", {Size = UDim2.new(1,0,0,64), BackgroundColor3 = J.surface, BorderSizePixel = 0, ZIndex = 3}, parent)
+-- seal 36x36 R1 at (20,14)
+local icon = makeJadeIcon(header); icon.Position = UDim2.new(0,20,0,14)
+-- wordmark PlayfairDisplayBold 26 Text-Primary at (68,9)
+dlabel({Text = "ForageKit", TextSize = 26, TextColor3 = J.text,
+Position = UDim2.new(0,68,0,9), Size = UDim2.new(0,220,0,32), ZIndex = 4}, header)
+-- caption SourceSans 11 Text-Muted letter-spaced at (68,38)
+label({Text = letterSpace("JIANGHU · HARVEST ATELIER"), TextSize = 11, TextColor3 = J.muted,
+Position = UDim2.new(0,68,0,38), Size = UDim2.new(0,360,0,16), ZIndex = 4}, header)
+-- version chip R-Pill BG-Sunken mono 10 (right side, left of the status chip)
+local verChip = mk("Frame", {Size = UDim2.new(0,54,0,22), Position = UDim2.new(1,-262,0.5,-11), BackgroundColor3 = J.sunken, BorderSizePixel = 0, ZIndex = 4}, header)
+corner(verChip, RPILL); stroke(verChip, J.border, 1, 0.3)
+mlabel({Text = "v5.13", TextSize = 10, TextColor3 = J.muted,
+Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,1,0), TextXAlignment = Enum.TextXAlignment.Center, ZIndex = 5}, verChip)
+-- automation status chip (gui.chipDot/gui.chipText written by guiUpdateStatus; min width 96 for "AUTO-HARVEST ON")
+local chip = mk("Frame", {Size = UDim2.new(0,96,0,22), Position = UDim2.new(1,-200,0.5,-11), BackgroundColor3 = J.raised, BorderSizePixel = 0, ZIndex = 4}, header)
+corner(chip, RPILL); stroke(chip, J.border, 1, 0.3)
+gui.chipDot = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,10,0.5,-3), BackgroundColor3 = J.muted, BorderSizePixel = 0, ZIndex = 5}, chip); corner(gui.chipDot, RPILL)
+gui.chipText = mlabel({Text = "PAUSED", TextSize = 11, TextColor3 = J.muted,
+Position = UDim2.new(0,22,0,0), Size = UDim2.new(1,-30,1,0), ZIndex = 5}, chip)
+-- right cluster: gear (openSettings) + minimize + close (hides window, danger hover)
+local gear = makeGear(header); gear.Position = UDim2.new(1,-88,0,14); gear.ZIndex = 4
 gear.MouseButton1Click:Connect(function()
 if settingsFrame and settingsFrame.Visible then closeSettings() else openSettings() end
 end)
-local minBtn = mk("TextButton", {Text = "—", Font = FONT_BODY, TextSize = 14, TextColor3 = J.silver,
-BackgroundTransparency = 1, Size = UDim2.new(0,28,0,28), Position = UDim2.new(1,-78,0,9), ZIndex = 4}, header)
-local closeBtn = mk("TextButton", {Text = "×", Font = FONT_BODY, TextSize = 16, TextColor3 = J.silver,
-BackgroundTransparency = 1, Size = UDim2.new(0,28,0,28), Position = UDim2.new(1,-46,0,8), ZIndex = 4}, header)
-local function hoverBtn(b)
-b.MouseEnter:Connect(function() TweenSvc:Create(b, TweenInfo.new(0.12), {TextColor3 = J.gold}):Play() end)
-b.MouseLeave:Connect(function() TweenSvc:Create(b, TweenInfo.new(0.12), {TextColor3 = J.silver}):Play() end)
+local minBtn = mk("TextButton", {Text = "—", Font = FONT_BODY, TextSize = 14, TextColor3 = J.textSecondary,
+BackgroundTransparency = 1, Size = UDim2.new(0,36,0,36), Position = UDim2.new(1,-132,0,14), ZIndex = 4}, header)
+local closeBtn = mk("TextButton", {Text = "×", Font = FONT_BODY, TextSize = 16, TextColor3 = J.textSecondary,
+BackgroundTransparency = 1, Size = UDim2.new(0,36,0,36), Position = UDim2.new(1,-44,0,14), ZIndex = 4}, header)
+local function hoverBtn(b, col)
+local hc = col or J.text
+b.MouseEnter:Connect(function() TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = hc}):Play() end)
+b.MouseLeave:Connect(function() TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.textSecondary}):Play() end)
 end
-hoverBtn(minBtn); hoverBtn(closeBtn)
+hoverBtn(minBtn, J.gold)
+hoverBtn(closeBtn, J.dangerText)
 minBtn.MouseButton1Click:Connect(function() setMinimized(not minimized) end)
 closeBtn.MouseButton1Click:Connect(function() setVisible(false) end)
--- drag
+-- accent line 100%x2 at y=62: UIGradient jade->gold, transparency 0.55
+local accent = mk("Frame", {Size = UDim2.new(1,0,0,2), Position = UDim2.new(0,0,0,62),
+BackgroundColor3 = J.jade, BackgroundTransparency = 0.55, BorderSizePixel = 0, ZIndex = 5}, header)
+grad(accent, J.jade, J.gold, 0)
+-- drag (preserved): dragStart/frameStart + InputChanged/InputEnded with viewport clamping
 local dragStart, frameStart = nil, nil
 header.InputBegan:Connect(function(inp)
 if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
@@ -2017,7 +2454,11 @@ end)
 header.InputChanged:Connect(function(inp)
 if dragStart and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 local d = inp.Position - dragStart
-main.frame.Position = UDim2.new(frameStart.X.Scale, frameStart.X.Offset + d.X, frameStart.Y.Scale, frameStart.Y.Offset + d.Y)
+local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920,1080)
+local sx, sy = main.frame.AbsoluteSize.X, main.frame.AbsoluteSize.Y
+local nx = math.clamp(frameStart.X.Offset + d.X, math.min(48 - sx, vp.X - 48), math.max(48 - sx, vp.X - 48))
+local ny = math.clamp(frameStart.Y.Offset + d.Y, math.min(48 - sy, vp.Y - 48), math.max(48 - sy, vp.Y - 48))
+main.frame.Position = UDim2.new(frameStart.X.Scale, nx, frameStart.Y.Scale, ny)
 end
 end)
 header.InputEnded:Connect(function(inp)
@@ -2033,153 +2474,139 @@ local TABS = {
 {name = "Inventory"},
 }
 local function buildTabs(parent)
-local bar = mk("Frame", {Size = UDim2.new(1,0,0,34), BackgroundTransparency = 1, ZIndex = 3}, parent)
-divider(bar, UDim2.new(0,0,1,-1))
-local TAB_W, TAB_GAP, PAD_L = 108, 4, 20
-local indicator = mk("Frame", {Size = UDim2.new(0,TAB_W,0,2), Position = UDim2.new(0,PAD_L,1,-2), BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, bar)
+-- tab bar 100%x44 BG-Base + top hairline; tabs auto-width + 32px pad; ids/order/pages EXACTLY as before
+local bar = mk("Frame", {Size = UDim2.new(1,0,0,44), BackgroundColor3 = J.base, BorderSizePixel = 0, ZIndex = 3}, parent)
+divider(bar, UDim2.new(0,0,0,0))  -- top hairline
+local PAD_L, TAB_GAP = 20, 8
+local function tabWidth(name)
+local ok, w = pcall(function()
+local s = game:GetService("TextService"):GetTextSize(name, 13, Enum.Font.SourceSansSemibold, Vector2.new(400, 44))
+return s.X
+end)
+return ok and w or 60
+end
+-- indicator: 2px Accent-Jade anchored bottom, stored under BOTH tabIndicator and gui.tabIndicator
+local indW = tabWidth(TABS[1].name) + 32
+local indicator = mk("Frame", {Size = UDim2.new(0,indW,0,2), Position = UDim2.new(0,PAD_L,1,-2), BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 3}, bar)
 corner(indicator, 1)
 gui.tabIndicator = indicator
 tabIndicator = indicator
+local cursor = PAD_L
 for i, t in ipairs(TABS) do
-local x = PAD_L + (i-1)*(TAB_W + TAB_GAP)
-local b = mk("TextButton", {Text = t.name, Font = FONT_DISPLAY, TextSize = 12,
-TextColor3 = (i == 1) and J.text or J.silver,
-BackgroundTransparency = 1, Size = UDim2.new(0,TAB_W,0,30), Position = UDim2.new(0,x,0,2),
+local w = tabWidth(t.name)
+local b = mk("TextButton", {Text = t.name, Font = FONT_BODY, TextSize = 13,
+TextColor3 = (i == 1) and J.text or J.muted,
+BackgroundTransparency = 1, Size = UDim2.new(0,w + 32,0,44), Position = UDim2.new(0,cursor,0,0),
 AutoButtonColor = false, ZIndex = 4}, bar)
+setWeight(b, Enum.FontWeight.SemiBold)
 tabButtons[t.name] = b
-b.MouseEnter:Connect(function() if activeTab ~= t.name then TweenSvc:Create(b, TweenInfo.new(0.12), {TextColor3 = J.text}):Play() end end)
-b.MouseLeave:Connect(function() if activeTab ~= t.name then TweenSvc:Create(b, TweenInfo.new(0.12), {TextColor3 = J.silver}):Play() end end)
+b.MouseEnter:Connect(function() if activeTab ~= t.name then TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.textSecondary}):Play() end end)
+b.MouseLeave:Connect(function() if activeTab ~= t.name then TweenSvc:Create(b, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.muted}):Play() end end)
 b.MouseButton1Click:Connect(function() switchTab(t.name) end)
+cursor = cursor + w + 32 + TAB_GAP
 end
 return bar
 end
 local function buildSidebar(parent)
-local side = mk("Frame", {Size = UDim2.new(0,280,1,0), BackgroundColor3 = J.midnight, BorderSizePixel = 0, ZIndex = 3}, parent)
+-- right rail for the Harvesting tab: segmented Mode/Strategy + actions
+local side = mk("Frame", {Size = UDim2.new(0,280,1,0), Position = UDim2.new(1,-280,0,0), BackgroundColor3 = J.surface, BorderSizePixel = 0, ZIndex = 3}, parent)
 stroke(side, J.border, 1, 0.4)
 local scroll = mk("ScrollingFrame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, BorderSizePixel = 0,
 ScrollBarThickness = 5, ScrollBarImageColor3 = J.border, CanvasSize = UDim2.new(0,0,0,0),
 AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 4}, side)
-mk("UIListLayout", {Padding = UDim.new(0,6), SortOrder = Enum.SortOrder.LayoutOrder}, scroll)
+mk("UIListLayout", {Padding = UDim.new(0,10), SortOrder = Enum.SortOrder.LayoutOrder}, scroll)
 mk("UIPadding", {PaddingTop = UDim.new(0,14), PaddingBottom = UDim.new(0,16), PaddingLeft = UDim.new(0,16), PaddingRight = UDim.new(0,16)}, scroll)
--- MODE
+-- MODE (segmented); modeButtons entries keep the {btn, st, grad} shape + shared seg (thumb drive)
 sectionHead(scroll, "Mode")
-for _, m in ipairs({"Walk","Tween","Teleport","Adaptive"}) do
-local b = mk("TextButton", {Text = m, Font = FONT_BODY, TextSize = 12, TextColor3 = J.silver,
-BackgroundColor3 = J.charcoal, Size = UDim2.new(1,0,0,36), AutoButtonColor = false}, scroll)
-setWeight(b, Enum.FontWeight.SemiBold); corner(b, 5)
-local st = stroke(b, J.border, 1, 0.3)
-local g = grad(b, J.jade, J.jadeDk, 90); g.Enabled = false
-modeButtons[m] = {btn = b, st = st, grad = g}
-b.MouseEnter:Connect(function() if State.mode ~= m then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.raised}):Play() end end)
-b.MouseLeave:Connect(function() if State.mode ~= m then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.charcoal}):Play() end end)
-b.MouseButton1Click:Connect(function() setMode(m) end)
+do
+local holder = mk("Frame", {Size = UDim2.new(1,0,0,30), BackgroundTransparency = 1}, scroll)
+local seg = segmented(holder, {"Walk","Tween","Teleport","Adaptive"}, function() return State.mode end, setMode)
+for i, m in ipairs({"Walk","Tween","Teleport","Adaptive"}) do
+modeButtons[m] = {btn = seg.labels[i], st = nil, grad = nil, seg = seg}
 end
--- STRATEGY
+end
+-- STRATEGY (segmented)
 sectionHead(scroll, "Strategy", "how the harvest picks herbs")
-for _, s in ipairs({"Nearest", "Sequence"}) do
-local b = mk("TextButton", {Text = s, Font = FONT_BODY, TextSize = 12, TextColor3 = J.silver,
-BackgroundColor3 = J.charcoal, Size = UDim2.new(1,0,0,36), AutoButtonColor = false}, scroll)
-setWeight(b, Enum.FontWeight.SemiBold); corner(b, 5)
-local st = stroke(b, J.border, 1, 0.3)
-local g = grad(b, J.jade, J.jadeDk, 90); g.Enabled = false
-strategyButtons[s] = {btn = b, st = st, grad = g}
-b.MouseEnter:Connect(function() if State.strategy ~= s then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.raised}):Play() end end)
-b.MouseLeave:Connect(function() if State.strategy ~= s then TweenSvc:Create(b, TweenInfo.new(0.12), {BackgroundColor3 = J.charcoal}):Play() end end)
-b.MouseButton1Click:Connect(function() setStrategy(s) end)
+do
+local holder = mk("Frame", {Size = UDim2.new(1,0,0,30), BackgroundTransparency = 1}, scroll)
+local seg = segmented(holder, {"Nearest","Sequence"}, function() return State.strategy end, setStrategy)
+for i, s in ipairs({"Nearest","Sequence"}) do
+strategyButtons[s] = {btn = seg.labels[i], st = nil, grad = nil, seg = seg}
 end
--- initial paint of the strategy buttons
+end
+-- initial paint of the segments (drives thumb + label colors)
+setMode(State.mode)
 setStrategy(State.strategy)
--- ACTIONS (with divider above)
+-- ACTIONS (wiring preserved: startAuto / Scanner.refresh(verbose)+guiUpdateStatus / stopAuto / selectNearestTypes(8) / select-open / clear / settings)
 local actSpacer = mk("Frame", {Size = UDim2.new(1,0,0,2), BackgroundTransparency = 1}, scroll)
-local actHead = mk("Frame", {Size = UDim2.new(1,0,0,24), BackgroundTransparency = 1}, scroll)
-sectionHead(actHead, "Actions")
-mkButton(scroll, {text = "Start auto", size = UDim2.new(1,0,0,40), kind = "primary", gradient = true, textSize = 12, radius = 6, onClick = startAuto})
-local scanBtn = mkButton(scroll, {text = "Scan now", size = UDim2.new(1,0,0,34), kind = "secondary", textSize = 11,
-onClick = function() Scanner.refresh(true); if toast then toast("rescanned", "info") end end})
-gui.scanRing = mk("Frame", {Size = UDim2.new(0,14,0,14), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(1,-20,0.5,0),
+sectionHead(scroll, "Actions")
+mkButton(scroll, {text = "Start auto", size = UDim2.new(1,0,0,40), kind = "primary", gradient = true, textSize = 12, radius = R1, onClick = startAuto})
+local scanBtn = mkButton(scroll, {text = "Scan now", size = UDim2.new(1,0,0,34), kind = "outline", textSize = 11,
+onClick = function() Scanner.refresh(true); guiUpdateStatus(); if toast then toast("rescanned", "info") end end})
+gui.scanRing = mk("Frame", {Size = UDim2.new(0,8,0,8), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(1,-20,0.5,0),
 BackgroundTransparency = 1, BorderSizePixel = 0, Visible = false, ZIndex = 5}, scanBtn)
-corner(gui.scanRing, 7); stroke(gui.scanRing, J.jadeGlow, 2, 0.1)
-mkButton(scroll, {text = "Stop", size = UDim2.new(1,0,0,34), kind = "secondary", textSize = 11, onClick = stopAuto})
-mkButton(scroll, {text = "Nearest types", size = UDim2.new(1,0,0,34), kind = "secondary", textSize = 11, onClick = function() selectNearestTypes(8) end})
-mkButton(scroll, {text = "Select open", size = UDim2.new(1,0,0,34), kind = "secondary", textSize = 11,
+corner(gui.scanRing, RPILL); stroke(gui.scanRing, J.jade, 2, 0.1)
+mkButton(scroll, {text = "Nearest types (8)", size = UDim2.new(1,0,0,34), kind = "outline", textSize = 11, onClick = function() selectNearestTypes(8) end})
+mkButton(scroll, {text = "Stop", size = UDim2.new(1,0,0,32), kind = "secondary", textSize = 11, onClick = stopAuto})
+mkButton(scroll, {text = "Select open", size = UDim2.new(1,0,0,32), kind = "secondary", textSize = 11,
 onClick = function()
 for id in pairs(State.byType) do if not isTypeLocked(id) then State.selectedTypes[id] = true end end
 if onHerbsChanged then onHerbsChanged() end
 if toast then toast("selected open types", "info") end
 saveSettings()
 end})
-mkButton(scroll, {text = "Clear selection", size = UDim2.new(1,0,0,34), kind = "secondary", textSize = 11,
+mkButton(scroll, {text = "Clear selection", size = UDim2.new(1,0,0,32), kind = "secondary", textSize = 11,
 onClick = function() State.selectedTypes = {}; if onHerbsChanged then onHerbsChanged() end; saveSettings() end})
-mkButton(scroll, {text = "Settings", size = UDim2.new(1,0,0,34), kind = "secondary", textSize = 11, onClick = function()
+mkButton(scroll, {text = "Settings", size = UDim2.new(1,0,0,32), kind = "secondary", textSize = 11, onClick = function()
 if settingsFrame and settingsFrame.Visible then closeSettings() else openSettings() end
 end})
 return side
 end
 local function buildMain(parent)
-local mainCol = mk("Frame", {Size = UDim2.new(1,-280,1,0), Position = UDim2.new(0,280,0,0), BackgroundColor3 = J.ink, BorderSizePixel = 0, ZIndex = 3}, parent)
--- status bar
-local status = mk("Frame", {Size = UDim2.new(1,-48,0,36), Position = UDim2.new(0,24,0,16), BackgroundColor3 = J.charcoal, BorderSizePixel = 0, ZIndex = 4}, mainCol)
-corner(status, 8); gui.statusStroke = stroke(status, J.border, 1, 0.3)
-local hl = mk("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = 12}, status)
-mk("UIPadding", {PaddingLeft = UDim.new(0,16), PaddingRight = UDim.new(0,16)}, status)
-gui.statMode = label({Text = "", TextSize = 13, TextColor3 = J.jade, AutomaticSize = Enum.AutomaticSize.X}, status); setWeight(gui.statMode, Enum.FontWeight.SemiBold)
-label({Text = "·", TextSize = 12, TextColor3 = J.disabled, AutomaticSize = Enum.AutomaticSize.X}, status)
-gui.statTypes = label({Text = "", TextSize = 12, TextColor3 = J.silver, AutomaticSize = Enum.AutomaticSize.X}, status)
-label({Text = "·", TextSize = 12, TextColor3 = J.disabled, AutomaticSize = Enum.AutomaticSize.X}, status)
-gui.statOk = label({Text = "", TextSize = 12, TextColor3 = J.silver, AutomaticSize = Enum.AutomaticSize.X}, status)
-label({Text = "·", TextSize = 12, TextColor3 = J.disabled, AutomaticSize = Enum.AutomaticSize.X}, status)
-gui.statForage = label({Text = "", TextSize = 12, TextColor3 = J.gold, AutomaticSize = Enum.AutomaticSize.X}, status)
--- herb list header
-local lh = mk("Frame", {Size = UDim2.new(1,-48,0,18), Position = UDim2.new(0,24,0,60), BackgroundTransparency = 1, ZIndex = 4}, mainCol)
-label({Text = "HERB TYPE", TextSize = 10, TextColor3 = J.disabled, Position = UDim2.new(0,18,0,0), Size = UDim2.new(0.45,0,1,0), AutomaticSize = Enum.AutomaticSize.X}, lh)
-setWeight(lh:FindFirstChildOfClass("TextLabel"), Enum.FontWeight.SemiBold)
-label({Text = "LIVE", TextSize = 10, TextColor3 = J.disabled, Position = UDim2.new(0.55,0,0,0), Size = UDim2.new(0.1,0,1,0), TextXAlignment = Enum.TextXAlignment.Center}, lh)
-label({Text = "NEAREST", TextSize = 10, TextColor3 = J.disabled, Position = UDim2.new(0.66,0,0,0), Size = UDim2.new(0.09,0,1,0), TextXAlignment = Enum.TextXAlignment.Right}, lh)
--- herb list
-listFrame = mk("ScrollingFrame", {Position = UDim2.new(0,24,0,84), Size = UDim2.new(1,-48,1,-310),
+-- content column for the Harvesting tab: status bar + herb grid (listFrame) + emptyState + log
+local mainCol = mk("Frame", {Size = UDim2.new(1,-280,1,0), Position = UDim2.new(0,0,0,0), BackgroundTransparency = 1, ZIndex = 3}, parent)
+-- status bar (100%x30 BG-Raised): scan ring + "Scanning" + automation chip + mode/strategy mono + right cluster
+	local status = mk("Frame", {Size = UDim2.new(1,-48,0,30), Position = UDim2.new(0,24,0,0), BackgroundColor3 = J.raised, BorderSizePixel = 0, ZIndex = 4}, mainCol)
+	gui.statusStroke = stroke(status, J.border, 1, 0.3)
+	statusBar = status  -- consumed by the setVisible entrance stagger
+local left = mk("Frame", {Size = UDim2.new(1,-240,0,30), BackgroundTransparency = 1}, status)
+local hl = mk("UIListLayout", {FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = 10}, left)
+mk("UIPadding", {PaddingLeft = UDim.new(0,14)}, left)
+-- scan ring group: mirrors gui.scanRing.Visible (scanning state driven by setScanning)
+local scanGroup = mk("Frame", {Size = UDim2.new(0,74,0,22), BackgroundTransparency = 1, Visible = false}, left)
+local statusRing = mk("Frame", {Size = UDim2.new(0,8,0,8), Position = UDim2.new(0,0,0.5,-4), BackgroundColor3 = J.jade, BorderSizePixel = 0}, scanGroup); corner(statusRing, RPILL); stroke(statusRing, J.jade, 1.5, 0.1)
+local scanLbl = label({Text = "Scanning", TextSize = 12, TextColor3 = J.textSecondary, Position = UDim2.new(0,14,0,0), Size = UDim2.new(0,60,1,0), ZIndex = 2}, scanGroup); setWeight(scanLbl, Enum.FontWeight.SemiBold)
+-- automation chip (mirror of header gui.chipDot/gui.chipText)
+local chip2 = mk("Frame", {Size = UDim2.new(0,110,0,20), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, left)
+corner(chip2, RPILL); stroke(chip2, J.border, 1, 0.3)
+local chip2Dot = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,8,0.5,-3), BackgroundColor3 = J.muted, BorderSizePixel = 0}, chip2); corner(chip2Dot, RPILL)
+local chip2Text = mlabel({Text = "PAUSED", TextSize = 10, TextColor3 = J.muted, Position = UDim2.new(0,20,0,0), Size = UDim2.new(1,-26,1,0), ZIndex = 2}, chip2)
+-- mode/strategy + counts (guiUpdateStatus writes these)
+gui.statMode = mlabel({Text = "", TextSize = 11, TextColor3 = J.muted, AutomaticSize = Enum.AutomaticSize.X}, left)
+gui.statTypes = mlabel({Text = "", TextSize = 11, TextColor3 = J.muted, AutomaticSize = Enum.AutomaticSize.X}, left)
+gui.statOk = mlabel({Text = "", TextSize = 11, TextColor3 = J.muted, AutomaticSize = Enum.AutomaticSize.X}, left)
+-- right cluster: "herbs 042 · nodes 128"
+gui.statForage = mlabel({Text = "", TextSize = 12, TextColor3 = J.textGold, Position = UDim2.new(1,-14,0,0), Size = UDim2.new(0,220,1,0), TextXAlignment = Enum.TextXAlignment.Right, ZIndex = 2}, status)
+-- mirror scan state + header chip state
+local function syncScanViz()
+if not scanGroup then return end
+scanGroup.Visible = gui.scanRing and gui.scanRing.Visible or false
+end
+if gui.scanRing then gui.scanRing:GetPropertyChangedSignal("Visible"):Connect(syncScanViz) end
+syncScanViz()
+if gui.chipText then gui.chipText:GetPropertyChangedSignal("Text"):Connect(function() chip2Text.Text = gui.chipText.Text end) end
+if gui.chipText then gui.chipText:GetPropertyChangedSignal("TextColor3"):Connect(function() chip2Text.TextColor3 = gui.chipText.TextColor3 end) end
+if gui.chipDot then gui.chipDot:GetPropertyChangedSignal("BackgroundColor3"):Connect(function() chip2Dot.BackgroundColor3 = gui.chipDot.BackgroundColor3 end) end
+-- herb list (grid: 264x76 cards, FillDirection Vertical, centered, 8px padding; UIPadding 20)
+listFrame = mk("ScrollingFrame", {Position = UDim2.new(0,24,0,44), Size = UDim2.new(1,-48,1,-244),
 BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = J.border,
 CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 4}, mainCol)
-mk("UIListLayout", {Padding = UDim.new(0,6), SortOrder = Enum.SortOrder.LayoutOrder}, listFrame)
-mk("UIPadding", {PaddingTop = UDim.new(0,2), PaddingBottom = UDim.new(0,2)}, listFrame)
--- empty state (radar)
-emptyState = mk("Frame", {Position = UDim2.new(0,24,0,84), Size = UDim2.new(1,-48,1,-310), BackgroundTransparency = 1, Visible = true, ZIndex = 4}, mainCol)
-local esWrap = mk("Frame", {Size = UDim2.new(0,300,0,220), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,-16), BackgroundTransparency = 1}, emptyState)
-local radarPivot = mk("Frame", {Size = UDim2.new(0,0,0,0), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0,52), BackgroundTransparency = 1}, esWrap)
-local radarRings = {}
-for i, sz in ipairs({34, 58, 82}) do
-local ring = mk("Frame", {Size = UDim2.new(0,sz,0,sz), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundTransparency = 1, BorderSizePixel = 0}, radarPivot)
-corner(ring, sz/2); stroke(ring, J.jade, 1.5, 0.55); radarRings[i] = ring
-end
-local radarCore = mk("Frame", {Size = UDim2.new(0,8,0,8), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundColor3 = J.jade, BorderSizePixel = 0}, radarPivot); corner(radarCore, 4)
-local sweepPivot = mk("Frame", {Size = UDim2.new(0,0,0,0), AnchorPoint = Vector2.new(0.5,0.5), Position = UDim2.new(0.5,0,0.5,0), BackgroundTransparency = 1}, radarPivot)
-local sweep = mk("Frame", {Size = UDim2.new(0,2,0,41), AnchorPoint = Vector2.new(0.5,1), Position = UDim2.new(0.5,0,0.5,0), BackgroundColor3 = J.gold, BackgroundTransparency = 0.2, BorderSizePixel = 0}, sweepPivot)
-grad(sweep, J.gold, J.gold, 0, NumberSequence.new({NumberSequenceKeypoint.new(0,0.1), NumberSequenceKeypoint.new(1,0.9)}))
-track(task.spawn(function()
-while alive and main.frame and main.frame.Visible and not minimized do
-pcall(function() TweenSvc:Create(sweepPivot, TweenInfo.new(2.6, Enum.EasingStyle.Linear, Enum.EasingDirection.In, 0), {Rotation = 360}):Play() end)
-task.wait(2.6)
-end
-end))
-track(task.spawn(function()
-while alive and main.frame and main.frame.Visible and not minimized do
-for i, ring in ipairs(radarRings) do
-task.delay(i * 0.4, function()
-if not ring.Parent then return end
-pcall(function() TweenSvc:Create(ring, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, ring.AbsoluteSize.X + 8, 0, ring.AbsoluteSize.Y + 8)}):Play() end)
-pcall(function() ring.UIStroke.Transparency = 0.3 end)
-task.wait(1.2)
-pcall(function() TweenSvc:Create(ring, TweenInfo.new(1.2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {Size = UDim2.new(0, ring.AbsoluteSize.X - 8, 0, ring.AbsoluteSize.Y - 8)}):Play() end)
-pcall(function() ring.UIStroke.Transparency = 0.6 end)
-end)
-end
-task.wait(2.8)
-end
-end))
-dlabel({Text = "Awaiting Scan", TextSize = 17, TextColor3 = J.text, Position = UDim2.new(0,0,0,112), Size = UDim2.new(1,0,0,24), TextXAlignment = Enum.TextXAlignment.Center}, esWrap)
-label({Text = "No herbs in range — walk to a foraging zone or press Scan now", TextSize = 11, TextColor3 = J.silver,
-Position = UDim2.new(0,0,0,140), Size = UDim2.new(1,0,0,32), TextXAlignment = Enum.TextXAlignment.Center, TextWrapped = true}, esWrap)
-gui.emptySub = mlabel({Text = "last scan  ·  0 nodes  ·  0 herbs", TextSize = 10, TextColor3 = J.disabled,
-Position = UDim2.new(0,0,0,176), Size = UDim2.new(1,0,0,20), TextXAlignment = Enum.TextXAlignment.Center}, esWrap)
+mk("UIGridLayout", {FillDirection = Enum.FillDirection.Vertical, CellSize = UDim2.new(0,264,0,76),
+SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center,
+Padding = UDim.new(0,8)}, listFrame)
+mk("UIPadding", {PaddingTop = UDim.new(0,20), PaddingBottom = UDim.new(0,20), PaddingLeft = UDim.new(0,20), PaddingRight = UDim.new(0,20)}, listFrame)
+-- empty state (content lazily built by setEmptyState)
+emptyState = mk("Frame", {Position = UDim2.new(0,24,0,44), Size = UDim2.new(1,-48,1,-244), BackgroundTransparency = 1, Visible = false, ZIndex = 4}, mainCol)
 -- log header
 local logHead = mk("Frame", {Size = UDim2.new(1,-48,0,20), Position = UDim2.new(0,24,1,-200), BackgroundTransparency = 1, ZIndex = 4}, mainCol)
 mk("Frame", {Size = UDim2.new(0,2,0,11), Position = UDim2.new(0,0,0,5), BackgroundColor3 = J.jade, BorderSizePixel = 0}, logHead)
@@ -2192,7 +2619,7 @@ clearBtn.MouseLeave:Connect(function() TweenSvc:Create(clearBtn, TweenInfo.new(0
 clearBtn.MouseButton1Click:Connect(clearLog)
 -- log
 local logFrame = mk("ScrollingFrame", {Position = UDim2.new(0,24,1,-178), Size = UDim2.new(1,-48,0,160),
-BackgroundColor3 = J.midnight, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = J.border,
+BackgroundColor3 = J.surface, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollBarImageColor3 = J.border,
 CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 4}, mainCol)
 corner(logFrame, 6); stroke(logFrame, J.border, 1, 0.4)
 gui.logLayout = mk("UIListLayout", {Padding = UDim.new(0,2), SortOrder = Enum.SortOrder.LayoutOrder}, logFrame)
@@ -2243,7 +2670,7 @@ local function _tweenToggleKnob(tgRef, toOn)
 		if c:IsA("Frame") then knob = c; break end
 	end
 	if knob then
-		local goalPos = toOn and UDim2.new(1,-23,0.5,-10) or UDim2.new(0,3,0.5,-10)
+			local goalPos = toOn and UDim2.new(0,21,0.5,-8) or UDim2.new(0,3,0.5,-8)
 		TweenSvc:Create(knob, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Position = goalPos}):Play()
 	end
 	if toOn then
@@ -2257,10 +2684,10 @@ local function _tweenToggleKnob(tgRef, toOn)
 	end
 end
 
--- _setBodyBtWithConfirm: gates the lethal Body Auto-BT behind a confirm overlay.
--- OFF is always safe → immediate unset. ON → shows the confirm overlay first.
-local _bodyConfirmOverlay = nil
-_setBodyBtWithConfirm = function(v, toggleRef)
+	-- _setBodyBtWithConfirm: gates the lethal Body Auto-BT behind a confirm overlay.
+	-- OFF is always safe → immediate unset. ON → shows the confirm overlay first.
+	_bodyConfirmOverlay = nil  -- hoisted module-level local (see tab switching state); plain assignment here
+	_setBodyBtWithConfirm = function(v, toggleRef)
 	if not v then
 		autoBt.bodyEnabled = false
 		autoBt.bodyConfirmPending = false
@@ -2331,9 +2758,6 @@ _setBodyBtWithConfirm = function(v, toggleRef)
 end
 local cultConn = nil
 local function buildWindow()
-guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
-IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
-lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui"))
 -- use saved size if available, otherwise adaptive from viewport
 local aw, ah
 if CONFIG.WindowSize and CONFIG.WindowSize.X > 0 and CONFIG.WindowSize.Y > 0 then
@@ -2345,12 +2769,12 @@ aw = math.clamp(math.floor(vs.X * 0.75), 720, 1400)
 ah = math.clamp(math.floor(vs.Y * 0.72), 520, 900)
 CONFIG.WindowSize = Vector2.new(aw, ah)
 end
+-- window frame: BG-Base R3 BW1 + Atelier Shadow (chunk-1 helper) + UIScale (consumed by setVisible)
 main.frame = mk("Frame", {Size = UDim2.new(0,aw,0,ah), Position = UDim2.new(0.5,-aw/2,0.5,-ah/2),
-BackgroundColor3 = J.ink, BorderSizePixel = 0, Visible = false}, guiRoot)
-corner(main.frame, 12); stroke(main.frame, J.border, 1, 0)
-grad(main.frame, J.ink, J.midnight, 0)
-local drop = mk("Frame", {Size = UDim2.new(1,12,1,12), Position = UDim2.new(0,-6,0,7), BackgroundColor3 = Color3.fromRGB(0,0,0), BackgroundTransparency = 0.6, ZIndex = 0}, main.frame)
-corner(drop, 15)
+BackgroundColor3 = J.base, BorderSizePixel = 0, Visible = false}, guiRoot)
+corner(main.frame, R3); stroke(main.frame, J.border, 1, 0.35)
+atelierShadow(main.frame, {radius = R3, zIndex = 5}, {depth = true, bg = J.base}, nil)
+mk("UIScale", {Scale = 1}, main.frame)
 -- ambient glows (inside a clipped frame over the SOLID base -> no bleed)
 local ambient = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 1}, main.frame)
 local glowA = mk("Frame", {Size = UDim2.new(0,320,0,320), Position = UDim2.new(0,-110,0,-130), BackgroundColor3 = J.jade, BackgroundTransparency = 0.965, BorderSizePixel = 0}, ambient); corner(glowA, 160)
@@ -2367,141 +2791,24 @@ pcall(function() TweenSvc:Create(glowB, TweenInfo.new(8, Enum.EasingStyle.Sine, 
 pcall(function() TweenSvc:Create(glowB, TweenInfo.new(8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundTransparency = 0.98, Position = UDim2.new(1,-160,1,-160)}):Play() end); task.wait(8)
 end
 end))
-buildHeader(main.frame)
+-- shell assembly: header (64) + tabs (44) + content
+headerFrame = buildHeader(main.frame)
 tabsBar = buildTabs(main.frame)
-tabsBar.Position = UDim2.new(0,0,0,46)
-content.frame = mk("Frame", {Size = UDim2.new(1,0,1,-80), Position = UDim2.new(0,0,0,80), BackgroundTransparency = 1, ZIndex = 2}, main.frame)
+tabsBar.Position = UDim2.new(0,0,0,64)
+content.frame = mk("Frame", {Size = UDim2.new(1,0,1,-108), Position = UDim2.new(0,0,0,108), BackgroundTransparency = 1, ZIndex = 2}, main.frame)
 harvestSidebar = buildSidebar(content.frame)
 harvestContent = buildMain(content.frame)
 -- register Harvesting tab
 tabPages["Harvesting"] = { contentFrame = harvestContent, sidebarFrame = harvestSidebar }
--- build Stats page (first tab, default) — full cultivation dashboard
--- ════════════════════════════════════════════════════════════════════════
--- STATS TAB — premium "Cultivation Dashboard" scaffold
--- ambient glows · status dot · accent line · safe strip · smart auto-bt pill · scroll
--- ════════════════════════════════════════════════════════════════════════
-local QI_GLOW   = Color3.fromRGB(96,200,214)   -- Qi  active path ambient (matches RT.cyan)
-local BODY_GLOW = Color3.fromRGB(224,164,88)   -- Body active path ambient (matches RT.warm / J.amber)
+-- build Stats page (first tab, default) — Midnight Atelier dashboard (UX_SPEC §6)
 local statsPage = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 4}, content.frame)
-
--- forward-declared upvalues used by click handlers (must be locals BEFORE assignment
--- so their own closures can see them as upvalues — same pattern as the old btEnableBtn)
-local statsScroll, statusDot, accentLine, accentShimmer, safeStripLabel
-local autoBtBar, autoBtPill, btFeedbackLabel
-local ambientA, ambientB
-
 -- looping-tween helper (mirrors JianghuStats twLoop: reversed, -1 repeat)
 local function twLoop(obj, props, t, style)
-    if not obj then return nil end
-    local info = TweenInfo.new(t or 1, style or Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
-    local tween = TweenSvc:Create(obj, info, props)
-    pcall(function() tween:Play() end)
-    return tween
-end
-
--- ambient accent glows behind everything (clipped to statsPage)
-do
-    local clip = mk("Frame", {Size = UDim2.new(1,0,1,0), Position = UDim2.new(0,0,0,0),
-        BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 1}, statsPage)
-    local function softGlow(pos, size)
-        local g = mk("Frame", {Size = UDim2.new(0,size,0,size), Position = pos,
-            BackgroundColor3 = QI_GLOW, BackgroundTransparency = 0.86, BorderSizePixel = 0, ZIndex = 1}, clip)
-        corner(g, size)  -- fully round
-        mk("UIGradient", {
-            Transparency = NumberSequence.new({
-                NumberSequenceKeypoint.new(0, 0.35),
-                NumberSequenceKeypoint.new(1, 1),
-            }),
-            Color = ColorSequence.new(QI_GLOW, QI_GLOW),
-        }, g)
-        return g
-    end
-    ambientA = softGlow(UDim2.new(0,-70,0,-40), 210)
-    ambientB = softGlow(UDim2.new(1,-120,1,-80), 170)
-    twLoop(ambientA, {Position = UDim2.new(0,30,0,10)}, 7)
-    twLoop(ambientB, {Position = UDim2.new(1,-180,1,-150)}, 9)
-end
-
--- accent line (2px) at very top — Qi jade / Body amber + gliding white shimmer
-accentLine = mk("Frame", {Size = UDim2.new(1,0,0,2), Position = UDim2.new(0,0,0,0),
-    BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, statsPage)
-accentShimmer = mk("Frame", {Size = UDim2.new(0.3,0,1,0), Position = UDim2.new(0,0,0,0),
-    BackgroundColor3 = Color3.fromRGB(255,255,255), BackgroundTransparency = 0.55,
-    BorderSizePixel = 0, ZIndex = 5}, accentLine)
-corner(accentShimmer, 4)
-twLoop(accentShimmer, {Position = UDim2.new(0.7,0,0,0)}, 2.6)
-
--- safe strip — single-line truth about hook safety, status dot inline at left edge
-safeStripLabel = mk("TextLabel", {Size = UDim2.new(1,-38,0,16), Position = UDim2.new(0,26,0,8),
-    BackgroundTransparency = 1, Text = "SAFE · 0 fires · 0 hooks · reads state_updated only",
-    TextColor3 = J.jade, TextSize = 10, Font = FONT_MONO,
-    TextXAlignment = Enum.TextXAlignment.Left, ZIndex = 3}, statsPage)
-statusDot = mk("Frame", {Size = UDim2.new(0,9,0,9), Position = UDim2.new(0,8,0,12),
-    BackgroundColor3 = J.disabled, BackgroundTransparency = 0, BorderSizePixel = 0, ZIndex = 4}, statsPage)
-corner(statusDot, 9)
-twLoop(statusDot, {BackgroundTransparency = 0.5}, 1.1)  -- 0 → 0.5 → 0 pulse
-
--- hairline divider above the auto-bt control bar (mimics Settings separator idiom)
-do
-    local div = mk("Frame", {Size = UDim2.new(1,-16,0,1), Position = UDim2.new(0,8,0,29),
-        BackgroundColor3 = J.border, BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 3}, statsPage)
-    corner(div, 1)
-end
-
--- auto-bt control bar (smart pill + slim feedback + body toggle, side by side)
-autoBtBar = mk("Frame", {Size = UDim2.new(1,-16,0,34), Position = UDim2.new(0,8,0,34),
-    BackgroundColor3 = J.charcoal, BorderSizePixel = 0, ZIndex = 3}, statsPage)
-corner(autoBtBar, 8)
-stroke(autoBtBar, J.border, 1, 0.5)
-do
-    -- 2px jade tick on the left edge, mirrors the sectionHead idiom
-    local tick_ = mk("Frame", {Size = UDim2.new(0,2,1,-6), Position = UDim2.new(0,3,0,3),
-        BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 4}, autoBtBar)
-    corner(tick_, 1)
-end
-autoBtPill = mk("TextButton", {
-    Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)", TextColor3 = Color3.fromRGB(150,162,178), TextSize = 11,
-    Font = FONT_BODY, AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(46,51,66),
-    BorderSizePixel = 0, Size = UDim2.new(0.62,-10,1,-6), Position = UDim2.new(0,10,0,3),
-    TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
-}, autoBtBar)
-corner(autoBtPill, 6)
-do
-    local padP = mk("UIPadding", {}, autoBtPill)
-    padP.PaddingLeft = UDim.new(0,8)
-end
--- hover tint on the main pill
-autoBtPill.MouseEnter:Connect(function()
-    TweenSvc:Create(autoBtPill, TweenInfo.new(0.12), {BackgroundColor3 = autoBt.enabled
-        and Color3.fromRGB(70,180,110) or Color3.fromRGB(60,67,84)}):Play()
-end)
-autoBtPill.MouseLeave:Connect(function()
-    TweenSvc:Create(autoBtPill, TweenInfo.new(0.2), {BackgroundColor3 = autoBt.enabled
-        and (tick() < autoBt.flashUntil and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64))
-        or Color3.fromRGB(46,51,66)}):Play()
-end)
-
-btFeedbackLabel = mk("TextLabel", {
-    Text = "—", TextColor3 = J.silver, TextSize = 10, Font = FONT_MONO,
-    BackgroundTransparency = 1, BorderSizePixel = 0,
-    Size = UDim2.new(0.38,-104,1,0), Position = UDim2.new(0.62,94,0,0),
-    TextXAlignment = Enum.TextXAlignment.Right, TextTruncate = Enum.TextTruncate.AtEnd, ZIndex = 4,
-}, autoBtBar)
-do
-    local padF = mk("UIPadding", {}, btFeedbackLabel)
-    padF.PaddingRight = UDim.new(0,8)
-end
-
--- scroll container — watermarked charcoal surface (not fully transparent)
-statsScroll = mk("ScrollingFrame", {Size = UDim2.new(1,-16,1,-76), Position = UDim2.new(0,8,0,74),
-    BackgroundColor3 = J.charcoal, BackgroundTransparency = 0, BorderSizePixel = 0,
-    ScrollBarThickness = 4, ScrollBarImageColor3 = J.border,
-    CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3}, statsPage)
-corner(statsScroll, 9)
-do
-    local padS = mk("UIPadding", {}, statsScroll)
-    padS.PaddingLeft = UDim.new(0,10); padS.PaddingRight = UDim.new(0,10)
-    padS.PaddingTop = UDim.new(0,10);  padS.PaddingBottom = UDim.new(0,10)
+if not obj then return nil end
+local info = TweenInfo.new(t or 1, style or Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
+local tween = TweenSvc:Create(obj, info, props)
+pcall(function() tween:Play() end)
+return tween
 end
 
 -- ─── CULTIVATION STATE READING ───
@@ -2817,306 +3124,878 @@ if p == "Qi" then return majQi >= req end
 return majBody >= req
 end
 
--- ─── BUILD STATS SECTIONS (RichText) ───
-dbg("stats page build")
-
--- rich label lives inside the new scroll (LineHeight 1.18 for premium density)
-local cultRichLabel = label({Text = "", Font = FONT_MONO, TextSize = 13,
-    TextColor3 = J.text, TextWrapped = true, RichText = true,
-    AutomaticSize = Enum.AutomaticSize.Y, LineHeight = 1.18,
-    Size = UDim2.new(1,0,0,0), TextXAlignment = Enum.TextXAlignment.Left,
-    TextYAlignment = Enum.TextYAlignment.Top}, statsScroll)
-
--- ─── AUTO-BT INTERACTIONS (wire pill + body toggle; no statsWideBtn) ───
--- autoBtPill click = toggle autoBt.enabled (reuses old btEnableBtn onClick logic)
-autoBtPill.MouseButton1Click:Connect(function()
-    autoBt.enabled = not autoBt.enabled
-    if autoBt.enabled then
-        autoBtPill.Text = "AUTO-BT  ON   Qi≥100%"
-        autoBtPill.TextColor3 = Color3.fromRGB(225,255,235)
-        autoBtPill.BackgroundColor3 = (tick() < autoBt.flashUntil)
-            and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64)
-    else
-        autoBtPill.Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)"
-        autoBtPill.TextColor3 = Color3.fromRGB(150,162,178)
-        autoBtPill.BackgroundColor3 = Color3.fromRGB(46,51,66)
-    end
+-- ─── STATS DASHBOARD BUILD (Midnight Atelier · UX_SPEC §6) ───
+dbg("stats dashboard build")
+local CARD_H = 156  -- spec min 132; 156 fits gauge radius 60 + trend well 96
+local _dashboard = mk("Frame", {Size = UDim2.new(1,0,1,0), BackgroundTransparency = 1, ZIndex = 4}, statsPage)
+local _dash = { cards = {} }
+local _dashView = "overview"
+local _dashCellW = 300
+local _skeletonTweens = {}
+local _lastScanAt = os.clock()
+local buildRawText = nil  -- forward decl (segmented view-switch handler calls it at click time)
+-- ── header row (56px): ESSENCE hero | BREAKTHROUGH cluster | right cluster ──
+local dashHead = mk("Frame", {Size = UDim2.new(1,-24,0,56), Position = UDim2.new(0,12,0,0), BackgroundColor3 = J.surface, BorderSizePixel = 0, ZIndex = 2}, _dashboard)
+corner(dashHead, R2)
+stroke(dashHead, J.border, 1, 0.35)
+local headCap = label({Text = letterSpace("ESSENCE"), TextSize = 10, TextColor3 = J.gold, Position = UDim2.new(0,16,0,6), Size = UDim2.new(0,180,0,14), AutomaticSize = Enum.AutomaticSize.X}, dashHead)
+setWeight(headCap, Enum.FontWeight.SemiBold)
+_dash.ess = mlabel({Text = "0", TextSize = 28, TextColor3 = J.text, Position = UDim2.new(0,16,0,20), Size = UDim2.new(0,180,0,30), AutomaticSize = Enum.AutomaticSize.X}, dashHead)
+setWeight(_dash.ess, Enum.FontWeight.Light)
+hairlineFade(dashHead, UDim2.new(0,212,0,8), true, J.border)
+_dash.ch = mlabel({Text = "\226\128\148", TextSize = 28, TextColor3 = J.jade, Position = UDim2.new(0,228,0,6), Size = UDim2.new(0,150,0,30), AutomaticSize = Enum.AutomaticSize.X}, dashHead)
+setWeight(_dash.ch, Enum.FontWeight.Light)
+_dash.realmSub = dlabel({Text = "\226\128\148", TextSize = 18, TextColor3 = J.text, Position = UDim2.new(0,228,0,36), Size = UDim2.new(0,250,0,18), AutomaticSize = Enum.AutomaticSize.X}, dashHead)
+_dash.tick = mlabel({Text = "TICK \226\128\148", TextSize = 11, TextColor3 = J.textSecondary, BackgroundColor3 = J.raised, Position = UDim2.new(0,470,0,34), Size = UDim2.new(0,88,0,20), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 3}, dashHead)
+corner(_dash.tick, R1)
+stroke(_dash.tick, J.border, 1, 0.3)
+hairlineFade(dashHead, UDim2.new(1,-330,0,8), true, J.border)
+_dash.mult = mlabel({Text = "\226\128\148", TextSize = 13, TextColor3 = J.text, BackgroundColor3 = J.raised, Position = UDim2.new(1,-236,0,16), Size = UDim2.new(0,74,0,24), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 3}, dashHead)
+corner(_dash.mult, R1)
+stroke(_dash.mult, J.border, 1, 0.3)
+_dash.engineDot = mk("Frame", {Size = UDim2.new(0,8,0,8), Position = UDim2.new(1,-252,0,24), BackgroundColor3 = J.disabled, BorderSizePixel = 0, ZIndex = 3}, dashHead)
+corner(_dash.engineDot, RPILL)
+local segWrap = mk("Frame", {Size = UDim2.new(0,136,0,30), Position = UDim2.new(1,-152,0,13), BackgroundTransparency = 1}, dashHead)
+segmented(segWrap, {"Overview", "Raw"}, function() return _dashView end, function(v)
+_dashView = (v == "Raw") and "raw" or "overview"
+_dash.scroll.Visible = (_dashView == "overview")
+_dash.rawScroll.Visible = (_dashView == "raw")
+if _dashView == "raw" and cultState and buildRawText then buildRawText() end
+_statsDirty = true
 end)
-
-
--- ─── STATS UPDATE FUNCTION (RichText) ───
-local statsStartTime = os.clock()
+-- ── grid scroll (cards) ──
+_dash.scroll = mk("ScrollingFrame", {Size = UDim2.new(1,-24,1,-72), Position = UDim2.new(0,12,0,64), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = J.border, CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3}, _dashboard)
+_dash.grid = mk("UIGridLayout", {FillDirection = Enum.FillDirection.Vertical, SortOrder = Enum.SortOrder.LayoutOrder, HorizontalAlignment = Enum.HorizontalAlignment.Center, CellPadding = UDim2.new(0,12,0,12), CellSize = UDim2.new(0, _dashCellW, 0, CARD_H)}, _dash.scroll)
+mk("UIPadding", {PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,4), PaddingLeft = UDim.new(0,4), PaddingRight = UDim.new(0,4)}, _dash.scroll)
+local function reflowGrid()
+local w = statsPage.AbsoluteSize.X
+if w <= 0 then return end
+local cols = (w >= 1000) and 3 or 2
+_dashCellW = math.floor((w - 48 - 12 * (cols - 1)) / cols)
+_dash.grid.CellSize = UDim2.new(0, _dashCellW, 0, CARD_H)
+end
+statsPage:GetPropertyChangedSignal("AbsoluteSize"):Connect(reflowGrid)
+reflowGrid()
+-- ── raw view (old RichText dump, reconstructed with preserved RT helpers) ──
+_dash.rawScroll = mk("ScrollingFrame", {Size = UDim2.new(1,-24,1,-72), Position = UDim2.new(0,12,0,64), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 4, ScrollBarImageColor3 = J.border, CanvasSize = UDim2.new(0,0,0,0), AutomaticCanvasSize = Enum.AutomaticSize.Y, ZIndex = 3, Visible = false}, _dashboard)
+_dash.rawLabel = mlabel({Text = "", Font = FONT_MONO, TextSize = 13, TextColor3 = J.text, TextWrapped = true, RichText = true, AutomaticSize = Enum.AutomaticSize.Y, LineHeight = 1.18, Size = UDim2.new(1,-24,0,0), TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top}, _dash.rawScroll)
+mk("UIPadding", {PaddingLeft = UDim.new(0,4), PaddingRight = UDim.new(0,4), PaddingTop = UDim.new(0,4), PaddingBottom = UDim.new(0,4)}, _dash.rawScroll)
+-- ── card factory (R2 BG-Surface BW1 + header dot/title/unit + body + skeleton well) ──
+local function makeCard(id, title, unit)
+local card = mk("Frame", {Size = UDim2.new(0, _dashCellW, 0, CARD_H), BackgroundColor3 = J.surface, BorderSizePixel = 0, LayoutOrder = id, ZIndex = 1}, _dash.scroll)
+corner(card, R2)
+stroke(card, J.border, 1, 0.35)
+_dash.cards[id] = card
+local headF = mk("Frame", {Size = UDim2.new(1,-16,0,26), Position = UDim2.new(0,8,0,6), BackgroundTransparency = 1}, card)
+local dot = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,0,0,4), BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 2}, headF)
+corner(dot, RPILL)
+local t = label({Text = letterSpace(title:upper()), TextSize = 10, TextColor3 = J.gold, Position = UDim2.new(0,12,0,0), Size = UDim2.new(0,240,0,14), AutomaticSize = Enum.AutomaticSize.X}, headF)
+setWeight(t, Enum.FontWeight.SemiBold)
+	if unit then
+	mlabel({Text = unit, TextSize = 10, TextColor3 = J.muted, Position = UDim2.new(1,-8,0,0), Size = UDim2.new(0,150,0,14), TextXAlignment = Enum.TextXAlignment.Right, AutomaticSize = Enum.AutomaticSize.X}, headF)
+	end
+local body = mk("Frame", {Size = UDim2.new(1,-16,1,-42), Position = UDim2.new(0,8,0,34), BackgroundTransparency = 1}, card)
+local skel = mk("Frame", {Name = "skeleton", Size = UDim2.new(1,0,1,0), BackgroundColor3 = J.raised, BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 2}, body)
+corner(skel, R1)
+return card, body, skel
+end
+local function _skeleton(card, on)
+if not card then return end
+local skel = card:FindFirstChild("skeleton")
+if not skel then return end
+if on then
+skel.Visible = true
+if not _skeletonTweens[card] then
+_skeletonTweens[card] = TweenSvc:Create(skel, TweenInfo.new(1.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {BackgroundTransparency = 0.8})
+pcall(function() _skeletonTweens[card]:Play() end)
+end
+else
+skel.Visible = false
+local tw = _skeletonTweens[card]
+if tw then pcall(function() tw:Cancel() end); _skeletonTweens[card] = nil end
+end
+end
+-- count-up 0.12s; snap when |Δ| >= 25% of target (UX_SPEC §4 anti-flicker)
+local function countUp(lbl, target, fmt)
+local cur = tonumber(lbl:GetAttribute("cv")) or target
+if cur ~= cur then cur = 0 end
+if target ~= target then target = 0 end
+fmt = fmt or fmtN
+lbl:SetAttribute("cv", target)
+if math.abs(target - cur) >= math.max(1, math.abs(target) * 0.25) then
+pcall(function() lbl.Text = fmt(target) end)
+return
+end
+local t0 = os.clock()
+task.spawn(function()
+while alive and lbl and lbl.Parent do
+local f = (os.clock() - t0) / 0.12
+if f >= 1 then
+pcall(function() lbl.Text = fmt(target) end)
+return
+end
+pcall(function() lbl.Text = fmt(cur + (target - cur) * (f * (2 - f))) end)
+task.wait(1 / 30)
+end
+end)
+end
+-- ── C1 ESSENCE & PROGRESS ──
+local c1, c1b = makeCard(1, "Essence", "PROGRESS")
+_dash.c1 = {}
+_dash.c1.val = mlabel({Text = "0", TextSize = 22, TextColor3 = J.text, Position = UDim2.new(0,0,0,0), Size = UDim2.new(0,200,0,28), AutomaticSize = Enum.AutomaticSize.X}, c1b)
+setWeight(_dash.c1.val, Enum.FontWeight.Light)
+_dash.c1.cost = mlabel({Text = "COST 0", TextSize = 12, TextColor3 = J.muted, Position = UDim2.new(1,0,0,4), Size = UDim2.new(0,130,0,16), TextXAlignment = Enum.TextXAlignment.Right}, c1b)
+_dash.c1.track = mk("Frame", {Size = UDim2.new(1,0,0,6), Position = UDim2.new(0,0,0,34), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, c1b)
+corner(_dash.c1.track, RPILL)
+_dash.c1.fill = mk("Frame", {Size = UDim2.new(0,0,1,0), Position = UDim2.new(0,0,0,0), BackgroundColor3 = J.gold, BorderSizePixel = 0}, _dash.c1.track)
+corner(_dash.c1.fill, RPILL)
+grad(_dash.c1.fill, J.gold, J.goldDeep, 90)
+_dash.c1.ratio = mlabel({Text = "0.0%", TextSize = 11, TextColor3 = J.textSecondary, Position = UDim2.new(0,0,0,48), Size = UDim2.new(0,110,0,14), AutomaticSize = Enum.AutomaticSize.X}, c1b)
+_dash.c1.rate = mlabel({Text = "", TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(1,0,0,48), Size = UDim2.new(0,220,0,14), TextXAlignment = Enum.TextXAlignment.Right}, c1b)
+-- ── C2 BREAKTHROUGH GAUGE (semicircle r60: 90 segments, Rotation = 180 - i*2) ──
+local c2, c2b = makeCard(2, "Breakthrough", "GAUGE")
+_dash.c2 = {}
+local gcx = math.floor(_dashCellW / 2) - 40
+local gcy = 60
+_dash.c2.segs = {}
+for gi = 0, 89 do
+local s = mk("Frame", {Size = UDim2.new(0,6,0,62), Position = UDim2.new(0,gcx,0,gcy), AnchorPoint = Vector2.new(0.5,1), Rotation = 180 - gi * 2, BackgroundColor3 = J.border, BorderSizePixel = 0, ZIndex = 1}, c2b)
+corner(s, 3)
+_dash.c2.segs[gi + 1] = s
+end
+_dash.c2.thresh = mk("Frame", {Size = UDim2.new(0,6,0,62), Position = UDim2.new(0,gcx,0,gcy), AnchorPoint = Vector2.new(0.5,1), Rotation = 0, BackgroundColor3 = J.gold, BorderSizePixel = 0, ZIndex = 2, Visible = false}, c2b)
+corner(_dash.c2.thresh, 3)
+_dash.c2.needle = mk("Frame", {Size = UDim2.new(0,2,0,14), Position = UDim2.new(0,gcx,0,gcy), AnchorPoint = Vector2.new(0.5,0.5), Rotation = 180, BackgroundColor3 = J.gold, BorderSizePixel = 0, ZIndex = 3}, c2b)
+corner(_dash.c2.needle, 1)
+local pivot = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,gcx,0,gcy), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = J.gold, BorderSizePixel = 0, ZIndex = 3}, c2b)
+corner(pivot, RPILL)
+_dash.c2.pct = mlabel({Text = "0.0%", TextSize = 22, TextColor3 = J.text, Position = UDim2.new(0,gcx - 88,0,gcy - 30), Size = UDim2.new(0,84,0,26), TextXAlignment = Enum.TextXAlignment.Right, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 4}, c2b)
+setWeight(_dash.c2.pct, Enum.FontWeight.Light)
+_dash.c2.cost = mlabel({Text = "COST 0", TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(0,gcx - 88,0,gcy - 6), Size = UDim2.new(0,84,0,14), TextXAlignment = Enum.TextXAlignment.Right, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 4}, c2b)
+_dash.c2.lock = mk("Frame", {Size = UDim2.new(0,190,0,56), Position = UDim2.new(0.5,0,0.5,0), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = J.surface, BorderSizePixel = 0, Visible = false, ZIndex = 5}, c2b)
+corner(_dash.c2.lock, R1)
+stroke(_dash.c2.lock, J.gold, 3, 0)
+dlabel({Text = "REALM-LOCKED", TextSize = 18, TextColor3 = J.gold, Position = UDim2.new(0,0,0,8), Size = UDim2.new(1,0,0,22), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center}, _dash.c2.lock)
+_dash.c2.lockCap = label({Text = "realm gate closed", TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(0,0,0,32), Size = UDim2.new(1,0,0,16), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center}, _dash.c2.lock)
+-- ── C3 TREND (plot well + 3 gridlines + 60 dots + 59 fit segments + vertex + legend) ──
+local c3, c3b = makeCard(3, "Trend", "FIT")
+_dash.c3 = {}
+local well = mk("Frame", {Size = UDim2.new(1,-16,0,96), Position = UDim2.new(0,8,0,0), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, c3b)
+corner(well, R2)
+for gli = 1, 3 do
+local gy = 8 + 80 * (gli / 4)
+local gl = mk("Frame", {Size = UDim2.new(1,-16,0,1), Position = UDim2.new(0,8,0,gy), BackgroundColor3 = J.border, BorderSizePixel = 0, ZIndex = 1}, well)
+grad(gl, J.border, J.border, 0, NumberSequence.new({NumberSequenceKeypoint.new(0,1), NumberSequenceKeypoint.new(0.08,0.35), NumberSequenceKeypoint.new(0.92,0.35), NumberSequenceKeypoint.new(1,1)}))
+end
+_dash.c3.dots = {}
+for di = 1, 60 do
+_dash.c3.dots[di] = mk("Frame", {Size = UDim2.new(0,2,0,2), Position = UDim2.new(0,0,0,0), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = J.jade, BorderSizePixel = 0, ZIndex = 2, Visible = false}, well)
+corner(_dash.c3.dots[di], 1)
+end
+_dash.c3.segs = {}
+for si = 1, 59 do
+_dash.c3.segs[si] = mk("Frame", {Size = UDim2.new(0,2,0,1), Position = UDim2.new(0,0,0,0), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = J.gold, BorderSizePixel = 0, ZIndex = 2, Visible = false}, well)
+end
+_dash.c3.vtx = mk("Frame", {Size = UDim2.new(0,6,0,6), Position = UDim2.new(0,0,0,0), AnchorPoint = Vector2.new(0.5,0.5), Rotation = 45, BackgroundColor3 = J.gold, BorderSizePixel = 0, ZIndex = 3, Visible = false}, well)
+corner(_dash.c3.vtx, 1)
+_dash.c3.pill = mlabel({Text = "", TextSize = 10, TextColor3 = J.muted, Position = UDim2.new(0,8,0,100), Size = UDim2.new(0,180,0,12), AutomaticSize = Enum.AutomaticSize.X}, c3b)
+_dash.c3.fitTag = mlabel({Text = "", TextSize = 11, TextColor3 = J.textSecondary, Position = UDim2.new(1,-8,0,98), Size = UDim2.new(0,190,0,14), TextXAlignment = Enum.TextXAlignment.Right, AutomaticSize = Enum.AutomaticSize.X}, c3b)
+-- ── C4 PROJECTION (2x2 mini-stats + fit footer) ──
+local c4, c4b = makeCard(4, "Projection", "MODEL")
+local function miniStat(parent, row, col, cap, color)
+local w = mk("Frame", {Size = UDim2.new(0.5,-4,0,30), Position = UDim2.new((col - 1) * 0.5, 0, (row - 1) * 34, 0), BackgroundTransparency = 1}, parent)
+label({Text = cap, TextSize = 10, TextColor3 = J.muted, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,0,0,12), AutomaticSize = Enum.AutomaticSize.X}, w)
+local v = mlabel({Text = "--", TextSize = 20, TextColor3 = color or J.text, Position = UDim2.new(0,0,0,10), Size = UDim2.new(1,0,0,20), AutomaticSize = Enum.AutomaticSize.X}, w)
+setWeight(v, Enum.FontWeight.Light)
+return v
+end
+_dash.c4 = {}
+_dash.c4.optCost = miniStat(c4b, 1, 1, "OPTIMAL COST", J.jade)
+_dash.c4.optCh = miniStat(c4b, 1, 2, "OPTIMAL CHANCE", J.gold)
+_dash.c4.est = miniStat(c4b, 2, 1, "EST. ATTEMPT (99%)", J.text)
+_dash.c4.att90 = miniStat(c4b, 2, 2, "ATTEMPTS TO 90%", J.text)
+_dash.c4.tag = mlabel({Text = "", TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(0,0,1,-14), Size = UDim2.new(1,0,0,14), TextXAlignment = Enum.TextXAlignment.Left}, c4b)
+-- ── C5 REALM (stage + tick chip + up to 6 technique rows + zones summary) ──
+local c5, c5b = makeCard(5, "Realm", "STAGE")
+_dash.c5 = {}
+_dash.c5.stage = dlabel({Text = "\226\128\148", TextSize = 20, TextColor3 = J.text, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-96,0,24), TextTruncate = Enum.TextTruncate.AtEnd}, c5b)
+_dash.c5.tick = mlabel({Text = "TICK \226\128\148", TextSize = 10, TextColor3 = J.textSecondary, BackgroundColor3 = J.raised, Position = UDim2.new(1,0,0,2), Size = UDim2.new(0,84,0,18), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, ZIndex = 2}, c5b)
+corner(_dash.c5.tick, R1)
+stroke(_dash.c5.tick, J.border, 1, 0.3)
+_dash.c5.tech = {}
+for ti = 1, 6 do
+local row = mk("Frame", {Size = UDim2.new(1,0,0,13), Position = UDim2.new(0,0,0,26 + (ti - 1) * 13), BackgroundTransparency = 1}, c5b)
+local tk = mk("Frame", {Size = UDim2.new(0,2,0,12), Position = UDim2.new(0,0,0,1), BackgroundColor3 = J.gold, BorderSizePixel = 0, Visible = false}, row)
+local nm = label({Text = "", TextSize = 12, TextColor3 = J.textSecondary, Position = UDim2.new(0,10,0,0), Size = UDim2.new(1,-76,0,13), TextTruncate = Enum.TextTruncate.AtEnd}, row)
+local mv = mlabel({Text = "", TextSize = 13, TextColor3 = J.muted, Position = UDim2.new(1,-62,0,0), Size = UDim2.new(0,62,0,13), TextXAlignment = Enum.TextXAlignment.Right}, row)
+_dash.c5.tech[ti] = { row = row, tick = tk, name = nm, mult = mv }
+end
+_dash.c5.techCount = 0
+_dash.c5.zones = mlabel({Text = "", TextSize = 10, TextColor3 = J.muted, Position = UDim2.new(0,0,1,-13), Size = UDim2.new(1,0,0,11), TextXAlignment = Enum.TextXAlignment.Left, TextTruncate = Enum.TextTruncate.AtEnd}, c5b)
+-- ── C6 SESSION (herbs/rate/time + 12-bar per-minute histogram) ──
+local c6, c6b = makeCard(6, "Session", "RUN")
+local _sess = { start = os.clock(), h0 = State.stats.harvested or 0, last = State.stats.harvested or 0, perMin = {}, acc = 0, lastMin = os.clock(), prevRunning = false, max = 1 }
+for bi = 1, 12 do _sess.perMin[bi] = 0 end
+_dash.c6 = {}
+_dash.c6.herbs = mlabel({Text = "0", TextSize = 24, TextColor3 = J.text, Position = UDim2.new(0,0,0,0), Size = UDim2.new(0,200,0,26), AutomaticSize = Enum.AutomaticSize.X}, c6b)
+setWeight(_dash.c6.herbs, Enum.FontWeight.Light)
+_dash.c6.delta = mlabel({Text = "", TextSize = 12, TextColor3 = J.ok, TextTransparency = 1, Position = UDim2.new(1,0,0,6), Size = UDim2.new(0,80,0,16), TextXAlignment = Enum.TextXAlignment.Right}, c6b)
+_dash.c6.rate = mlabel({Text = "0/s", TextSize = 24, TextColor3 = J.text, Position = UDim2.new(0,0,0,28), Size = UDim2.new(0,200,0,26), AutomaticSize = Enum.AutomaticSize.X}, c6b)
+setWeight(_dash.c6.rate, Enum.FontWeight.Light)
+_dash.c6.time = mlabel({Text = "0:00", TextSize = 24, TextColor3 = J.textSecondary, Position = UDim2.new(0,0,0,54), Size = UDim2.new(0,200,0,26), AutomaticSize = Enum.AutomaticSize.X}, c6b)
+setWeight(_dash.c6.time, Enum.FontWeight.Light)
+_dash.c6.bars = {}
+local barW = math.max(4, math.floor((_dashCellW - 16 - 44) / 12))
+for bi = 1, 12 do
+local wl = mk("Frame", {Size = UDim2.new(0, barW, 0, 24), Position = UDim2.new(0, 8 + (bi - 1) * (barW + 4), 1, -28), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, c6b)
+corner(wl, R1)
+local b = mk("Frame", {Size = UDim2.new(1,-2,0,2), Position = UDim2.new(0,1,1,-2), AnchorPoint = Vector2.new(0,1), BackgroundColor3 = J.jade, BorderSizePixel = 0}, wl)
+corner(b, R1)
+_dash.c6.bars[bi] = { well = wl, bar = b }
+end
+-- ── C7 SYSTEM (nodes / live herbs / last scan age) ──
+local c7, c7b = makeCard(7, "System", "SCAN")
+_dash.c7 = {}
+_dash.c7.nodes = mlabel({Text = "NODES 0", TextSize = 16, TextColor3 = J.text, Position = UDim2.new(0,0,0,4), Size = UDim2.new(0,200,0,20), AutomaticSize = Enum.AutomaticSize.X}, c7b)
+_dash.c7.herbs = mlabel({Text = "LIVE HERBS 000", TextSize = 16, TextColor3 = J.textSecondary, Position = UDim2.new(0,0,0,28), Size = UDim2.new(0,220,0,20), AutomaticSize = Enum.AutomaticSize.X}, c7b)
+_dash.c7.scanAge = mlabel({Text = "", TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(0,0,1,-16), Size = UDim2.new(1,0,0,14), TextXAlignment = Enum.TextXAlignment.Left}, c7b)
+_dash.c7.lastNodes = nil
+_dash.c7.lastHerbs = nil
+-- ── C8 NEAREST HERBS (up to 5 rows) ──
+local c8, c8b = makeCard(8, "Nearest", "HERBS")
+_dash.c8 = {}
+_dash.c8.rows = {}
+for ri = 1, 5 do
+local row = mk("Frame", {Size = UDim2.new(1,0,0,18), Position = UDim2.new(0,0,0,(ri - 1) * 18), BackgroundTransparency = 1}, c8b)
+local nm = label({Text = "", TextSize = 13, TextColor3 = J.textSecondary, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-76,0,18), TextTruncate = Enum.TextTruncate.AtEnd}, row)
+local ds = mlabel({Text = "", TextSize = 13, TextColor3 = J.muted, Position = UDim2.new(1,-68,0,0), Size = UDim2.new(0,68,0,18), TextXAlignment = Enum.TextXAlignment.Right}, row)
+_dash.c8.rows[ri] = { row = row, name = nm, dist = ds }
+end
+-- ── C9 AUTO-BT ENGINE (state chip / countdown / last result / cooldown bar) ──
+local c9, c9b = makeCard(9, "Auto-BT", "ENGINE")
+_dash.c9 = {}
+_dash.c9.chip = mk("TextButton", {Text = "ENGINE IDLE", Font = FONT_MONO, TextSize = 11, TextColor3 = J.muted, BackgroundColor3 = J.raised, BorderSizePixel = 0, Size = UDim2.new(0,108,0,24), Position = UDim2.new(0,0,0,0), TextXAlignment = Enum.TextXAlignment.Center, TextYAlignment = Enum.TextYAlignment.Center, AutoButtonColor = false, ZIndex = 2}, c9b)
+corner(_dash.c9.chip, R1)
+stroke(_dash.c9.chip, J.border, 1, 0.3)
+_dash.c9.chip.MouseButton1Click:Connect(function()
+autoBt.enabled = not autoBt.enabled
+if autoBt.enabled then autoBt.bootTime = os.clock(); autoBt.lastFire = tick() end
+pcall(saveSettings)
+end)
+_dash.c9.next = mlabel({Text = "\226\128\148", TextSize = 16, TextColor3 = J.text, Position = UDim2.new(0,0,0,30), Size = UDim2.new(1,0,0,20), AutomaticSize = Enum.AutomaticSize.X}, c9b)
+_dash.c9.result = label({Text = "", TextSize = 11, TextColor3 = J.silver, Position = UDim2.new(0,0,0,52), Size = UDim2.new(1,0,0,16), TextTruncate = Enum.TextTruncate.AtEnd}, c9b)
+_dash.c9.track = mk("Frame", {Size = UDim2.new(1,0,0,6), Position = UDim2.new(0,0,1,-6), BackgroundColor3 = J.sunken, BorderSizePixel = 0}, c9b)
+corner(_dash.c9.track, RPILL)
+_dash.c9.fill = mk("Frame", {Size = UDim2.new(0,0,1,0), Position = UDim2.new(0,0,0,0), BackgroundColor3 = J.gold, BorderSizePixel = 0}, _dash.c9.track)
+corner(_dash.c9.fill, RPILL)
+grad(_dash.c9.fill, J.gold, J.goldDeep, 90)
+-- ── C10 PROFILE (attribute rows) ──
+local c10, c10b = makeCard(10, "Profile", "ATTRS")
+local PROFILE_ROWS = { {"ROOT", "root"}, {"CONST", "const"}, {"LUCK", "luck"}, {"COMPR", "compr"}, {"FORAGE", "mf"}, {"ALCH", "ma"}, {"WEAPON", "mw"}, {"SKILL", "ms"}, {"SPIRIT", "ss"} }
+_dash.c10 = {}
+_dash.c10.rows = {}
+for pi = 1, 9 do
+local row = mk("Frame", {Size = UDim2.new(1,0,0,12), Position = UDim2.new(0,0,0,(pi - 1) * 12), BackgroundTransparency = 1}, c10b)
+label({Text = PROFILE_ROWS[pi][1], TextSize = 11, TextColor3 = J.muted, Position = UDim2.new(0,0,0,0), Size = UDim2.new(1,-84,0,12), AutomaticSize = Enum.AutomaticSize.X}, row)
+local vv = mlabel({Text = "?", TextSize = 13, TextColor3 = J.text, Position = UDim2.new(1,-80,0,0), Size = UDim2.new(0,80,0,12), TextXAlignment = Enum.TextXAlignment.Right}, row)
+_dash.c10.rows[pi] = { row = row, val = vv, key = PROFILE_ROWS[pi][2] }
+end
+-- pulse skeleton wells until first cultivation state arrives (updateStatsPage stops them)
+for ci = 1, 10 do _skeleton(_dash.cards[ci], true) end
+-- ─── DASHBOARD TICKS (4Hz; direct writes only — UX_SPEC §4 anti-flicker) ───
+local function tickSession()
+local now = os.clock()
+local harvested = State.stats.harvested or 0
+if State.running and not _sess.prevRunning then
+_sess.start = now; _sess.h0 = harvested; _sess.last = harvested
+_sess.perMin = {}; for bi = 1, 12 do _sess.perMin[bi] = 0 end
+_sess.acc = 0; _sess.lastMin = now; _sess.max = 1
+if _dash.c6.deltaTw then pcall(function() _dash.c6.deltaTw:Cancel() end); _dash.c6.deltaTw = nil end
+_dash.c6.delta.TextTransparency = 1
+end
+_sess.prevRunning = State.running
+local el = now - _sess.start
+local rate = (el > 0.5) and ((harvested - _sess.h0) / el) or 0
+_dash.c6.herbs.Text = fmtN(harvested)
+_dash.c6.rate.Text = fmtRate(rate)
+if el >= 3600 then
+_dash.c6.time.Text = string.format("%d:%02d:%02d", math.floor(el / 3600), math.floor((el % 3600) / 60), math.floor(el % 60))
+else
+_dash.c6.time.Text = string.format("%02d:%02d", math.floor(el / 60), math.floor(el % 60))
+end
+local d = harvested - _sess.last
+if d > 0 then
+_sess.last = harvested
+_sess.acc = _sess.acc + d
+if _dash.c6.deltaTw then pcall(function() _dash.c6.deltaTw:Cancel() end); _dash.c6.deltaTw = nil end
+_dash.c6.delta.TextTransparency = 0
+countUp(_dash.c6.delta, d, function(v) return "+" .. fmtN(v) end)
+local tw = TweenSvc:Create(_dash.c6.delta, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {TextTransparency = 1})
+_dash.c6.deltaTw = tw
+task.delay(0.3, function()
+if _dash.c6.deltaTw == tw then pcall(function() tw:Play() end) end
+end)
+end
+if now - _sess.lastMin >= 60 then
+local m = math.floor((now - _sess.lastMin) / 60)
+table.remove(_sess.perMin, 1)
+table.insert(_sess.perMin, (m > 1) and (_sess.acc / m) or _sess.acc)
+_sess.acc = 0
+_sess.lastMin = _sess.lastMin + m * 60
+end
+local mx = _sess.max
+for bi = 1, 12 do if _sess.perMin[bi] > mx then mx = _sess.perMin[bi] end end
+if mx <= 0 then mx = 1 end
+_sess.max = mx
+for bi = 1, 12 do
+local frac = _sess.perMin[bi] / mx
+local b = _dash.c6.bars[bi].bar
+TweenSvc:Create(b, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1,-2,0, math.max(2, math.floor(frac * 20)))}):Play()
+if bi == 12 and b.BackgroundColor3 ~= J.gold then b.BackgroundColor3 = J.gold elseif bi ~= 12 and b.BackgroundColor3 ~= J.jade then b.BackgroundColor3 = J.jade end
+end
+end
+local function tickSystem()
+local nodes = State.lastScanNodes or 0
+local herbs = State.lastScanHerbs or 0
+_dash.c7.nodes.Text = "NODES " .. fmtN(nodes)
+if _dash.c7.lastHerbs ~= herbs then
+_dash.c7.lastHerbs = herbs
+_dash.c7.herbs.Text = "LIVE HERBS " .. string.format("%03d", herbs)
+if _dash.c7.iceTw then pcall(function() _dash.c7.iceTw:Cancel() end) end
+_dash.c7.herbs.TextColor3 = J.seriesIce
+_dash.c7.iceTw = TweenSvc:Create(_dash.c7.herbs, TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {TextColor3 = J.textSecondary})
+pcall(function() _dash.c7.iceTw:Play() end)
+end
+if _dash.c7.lastNodes ~= nodes then
+_dash.c7.lastNodes = nodes
+_lastScanAt = os.clock()
+end
+local age = os.clock() - _lastScanAt
+_dash.c7.scanAge.Text = string.format("last scan %.1fs ago", age)
+_dash.c7.scanAge.TextColor3 = (age > 10) and J.dangerText or J.muted
+end
+local function tickNearest()
+local cands = {}
+for id in pairs(State.nearestByType) do cands[#cands + 1] = id end
+table.sort(cands, function(a, b) return distSqTo(State.nearestByType[a]) < distSqTo(State.nearestByType[b]) end)
+for ri = 1, 5 do
+local r = _dash.c8.rows[ri]
+if ri <= #cands then
+local id = cands[ri]
+local rec = State.nearestByType[id]
+r.row.Visible = true
+r.name.Text = id
+local d = math.sqrt(distSqTo(rec))
+if d < 1e8 then
+r.dist.Text = ("%.1fm"):format(d)
+r.dist.TextColor3 = (d < 10) and J.jade or J.muted
+else
+r.dist.Text = "--"
+r.dist.TextColor3 = J.muted
+end
+elseif r.row.Visible then
+r.row.Visible = false
+end
+end
+end
+local function tickEngineCard()
+local on = autoBt.enabled
+local nowT = tick()
+if on then
+_dash.c9.chip.Text = "ENGINE ON"
+_dash.c9.chip.TextColor3 = J.gold
+else
+_dash.c9.chip.Text = "ENGINE IDLE"
+_dash.c9.chip.TextColor3 = J.muted
+end
+local remain = autoBt.lastFire + autoBt.cooldown - nowT
+if on and remain > 0 then
+_dash.c9.next.Text = string.format("next in %d:%04.1f", math.floor(remain / 60), remain % 60)
+_dash.c9.next.TextColor3 = J.text
+elseif on then
+_dash.c9.next.Text = "ready"
+_dash.c9.next.TextColor3 = J.jade
+else
+_dash.c9.next.Text = "engine off"
+_dash.c9.next.TextColor3 = J.muted
+end
+local frac = 0
+if on and autoBt.cooldown > 0 then frac = math.clamp(1 - remain / autoBt.cooldown, 0, 1) end
+local w = math.floor(frac * _dash.c9.track.AbsoluteSize.X)
+TweenSvc:Create(_dash.c9.fill, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, w, 1, 0)}):Play()
+local flashing = nowT < autoBt.flashUntil
+_dash.c9.result.Text = autoBt.feedback or "\226\128\148"
+_dash.c9.result.TextColor3 = flashing and J.jade or J.silver
+if on then
+_dash.engineDot.BackgroundColor3 = (tick() - autoBt.lastFire) >= autoBt.cooldown and J.ok or J.gold
+else
+_dash.engineDot.BackgroundColor3 = J.disabled
+end
+end
+local function tickHeader()
+local node = cultState[cultActive] or cultState["Qi"]
+local cur = node and node.Current or 0
+local chance = node and node.BreakthroughChance or 0
+countUp(_dash.ess, cur)
+countUp(_dash.ch, chance * 100, function(v) return ("%.1f%%"):format(v) end)
+_dash.ch.TextColor3 = chance >= 0.6 and J.jade or (chance >= 0.3 and J.gold or (chance >= 0.15 and J.warn or J.dangerText))
+local prefix, tailVal = parseStage(node and node.Stage)
+local minor = node and (node.Minor or tailVal or 0) or 0
+local major = node and node.Major or 0
+_dash.realmSub.Text = "Minor " .. minor .. " \194\183 Major " .. major
+_dash.tick.Text = "TICK " .. tostring(cultState.TickMode or "?")
+local tm = node and node.TechniqueMultiplier
+_dash.mult.Text = (tm ~= nil) and (("%.2f"):format(tm) .. "\195\151") or "\226\128\148"
+end
+local function tickEssence()
+local node = cultState[cultActive] or cultState["Qi"]
+local cur = node and node.Current or 0
+local cost = node and node.BreakthroughCost or 0
+local frac = (cost and cost > 0) and math.min(1, cur / cost) or 0
+countUp(_dash.c1.val, cur)
+_dash.c1.cost.Text = "COST " .. fmtN(cost)
+local w = math.floor(frac * _dash.c1.track.AbsoluteSize.X)
+TweenSvc:Create(_dash.c1.fill, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0, w, 1, 0)}):Play()
+_dash.c1.ratio.Text = ("%.1f%%"):format(frac * 100)
+local rate = cultState[cultActive .. "EffectiveRate"] or cultState[cultActive .. "GrowthRate"] or 0
+_dash.c1.rate.Text = "server " .. fmtRate(rate) .. "  \194\183  obs " .. fmtRate(cultObs.rate)
+end
+local function tickGauge()
+local node = cultState[cultActive] or cultState["Qi"]
+local chance = node and node.BreakthroughChance or 0
+local cost = node and node.BreakthroughCost or 0
+local lit = math.floor(math.clamp(chance, 0, 1) * 90 + 0.5)
+for si = 1, 90 do
+local s = _dash.c2.segs[si]
+if si <= lit then
+if s.BackgroundColor3 ~= J.jade then s.BackgroundColor3 = J.jade end
+elseif s.BackgroundColor3 ~= J.border then
+s.BackgroundColor3 = J.border
+end
+end
+local rot = 180 - 178 * math.clamp(chance, 0, 1)
+TweenSvc:Create(_dash.c2.needle, TweenInfo.new(0.25, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Rotation = rot}):Play()
+countUp(_dash.c2.pct, chance * 100, function(v) return ("%.1f%%"):format(v) end)
+_dash.c2.cost.Text = "COST " .. fmtN(cost)
+local realActive = normPath(cultState.ActivePath or cultState.GainPath) or cultActive
+local lockV = cultState.RealmLocks and cultState.RealmLocks[realActive]
+if lockV then
+_dash.c2.lock.Visible = true
+_dash.c2.lockCap.Text = (type(lockV) == "number") and ("requires Major " .. lockV) or "realm gate closed"
+elseif _dash.c2.lock.Visible then
+_dash.c2.lock.Visible = false
+end
+if type(lockV) == "number" then
+local ti = math.clamp(math.floor(lockV / 10 * 90 + 0.5), 1, 90)
+_dash.c2.thresh.Rotation = 180 - (ti - 1) * 2
+_dash.c2.thresh.Visible = true
+elseif _dash.c2.thresh.Visible then
+_dash.c2.thresh.Visible = false
+end
+end
+local function tickTrend()
+local n = #cultSamples
+local w = well.AbsoluteSize.X - 16
+local h = 80
+if n < 2 then
+_dash.c3.pill.Text = ""
+_dash.c3.fitTag.Text = "need more samples"
+_dash.r2 = nil
+if _dash.c3.count and _dash.c3.count ~= 0 then
+_dash.c3.count = 0
+for di = 1, 60 do _dash.c3.dots[di].Visible = false end
+for si = 1, 59 do _dash.c3.segs[si].Visible = false end
+_dash.c3.vtx.Visible = false
+end
+return
+end
+local minCh, maxCh = 1, 0
+for i = 1, n do
+local ch = cultSamples[i].ch
+if ch < minCh then minCh = ch end
+if ch > maxCh then maxCh = ch end
+end
+local pad = (maxCh - minCh) * 0.1
+local lo, hi = minCh - pad, maxCh + pad
+if hi - lo < 1e-9 then hi = lo + 0.05 end
+if _dash.c3.count ~= n then
+_dash.c3.count = n
+for di = 1, 60 do _dash.c3.dots[di].Visible = (di <= n) end
+for si = 1, 59 do _dash.c3.segs[si].Visible = (si < n) end
+end
+for di = 1, math.min(60, n) do
+local s = cultSamples[di]
+_dash.c3.dots[di].Position = UDim2.new(0, 8 + (di - 1) / 59 * w, 0, 8 + (1 - (s.ch - lo) / (hi - lo)) * h)
+end
+local fit = fitChance()
+local a, b, c = 0, 0, 0
+local isQuad = useQuad(fit)
+if isQuad then a, b, c = fit.quad[1], fit.quad[2], fit.quad[3]
+elseif fit and fit.lin then a, b = fit.lin[1], fit.lin[2] end
+local mean = 0
+for i = 1, n do mean = mean + cultSamples[i].ch end
+mean = mean / n
+local ssRes, ssTot = 0, 0
+local px, py = {}, {}
+local rMin, rMax = cultSamples[1].r, cultSamples[1].r
+for i = 1, n do
+local s = cultSamples[i]
+if s.r < rMin then rMin = s.r end
+if s.r > rMax then rMax = s.r end
+end
+for i = 1, n do
+local s = cultSamples[i]
+local mv
+if isQuad then mv = a + b * s.r + c * s.r * s.r
+elseif fit and fit.lin then mv = a + b * s.r
+else mv = nil end
+if mv ~= nil then mv = math.min(1, math.max(0, mv)) end
+local diff = s.ch - (mv or s.ch)
+ssRes = ssRes + diff * diff
+local d2 = s.ch - mean
+ssTot = ssTot + d2 * d2
+end
+_dash.r2 = (ssTot < 1e-12) and 1 or (1 - ssRes / ssTot)
+_dash.c3.fitTag.Text = string.format("R\194\178 %.3f \194\183 %s fit", _dash.r2, isQuad and "quad" or "linear")
+_dash.c3.pill.Text = "P" .. n .. " \194\183 " .. fmtN((cultState[cultActive] or {}).Current)
+if isQuad or (fit and fit.lin) then
+local step = (rMax - rMin) / 59
+if step < 1e-12 then step = 1 end
+for i = 1, 60 do
+local r = rMin + (i - 1) * step
+local mv
+if isQuad then mv = math.min(1, math.max(0, a + b * r + c * r * r))
+else mv = math.min(1, math.max(0, a + b * r)) end
+px[i] = 8 + (i - 1) / 59 * w
+py[i] = 8 + (1 - (mv - lo) / (hi - lo)) * h
+end
+for si = 1, 59 do
+local p1x, p1y, p2x, p2y = px[si], py[si], px[si + 1], py[si + 1]
+local dx, dy = p2x - p1x, p2y - p1y
+local L = math.max(1, math.sqrt(dx * dx + dy * dy))
+local s = _dash.c3.segs[si]
+s.Size = UDim2.new(0, L, 0, 1)
+s.Rotation = math.atan2(dy, dx) * 180 / math.pi
+TweenSvc:Create(s, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = UDim2.new(0, p1x + dx / 2, 0, p1y + dy / 2)}):Play()
+end
+end
+local vtx = vertexInfo(fit)
+if vtx and vtx.r then
+local vx = 8 + math.clamp((vtx.r - rMin) / (rMax - rMin + 1e-9), 0, 1) * w
+local vch = math.min(1, math.max(0, vtx.ch))
+_dash.c3.vtx.Position = UDim2.new(0, vx, 0, 8 + (1 - (vch - lo) / (hi - lo)) * h)
+_dash.c3.vtx.Visible = true
+elseif _dash.c3.vtx.Visible then
+_dash.c3.vtx.Visible = false
+end
+end
+local function tickProjection()
+local node = cultState[cultActive] or cultState["Qi"]
+local cur = node and node.Current or 0
+local cost = node and node.BreakthroughCost or 0
+local rate = cultState[cultActive .. "EffectiveRate"] or cultState[cultActive .. "GrowthRate"] or 0
+local ch = node and node.BreakthroughChance or 0
+local fit = fitChance()
+local vtx = vertexInfo(fit)
+local curR = (cost and cost > 0) and cur / cost or 0
+if vtx and vtx.r then
+_dash.c4.optCost.Text = fmtN(vtx.r * cost)
+_dash.c4.optCh.Text = pct(vtx.ch)
+else
+_dash.c4.optCost.Text = "--"
+_dash.c4.optCh.Text = "--"
+end
+local t99 = attemptTimeFor(0.99, fit, curR, cur, cost, rate, ch)
+local t90 = attemptTimeFor(0.90, fit, curR, cur, cost, rate, ch)
+_dash.c4.est.Text = fmtT(t99)
+_dash.c4.att90.Text = fmtT(t90)
+local r2 = _dash.r2
+local bad = (r2 == nil) or (r2 < 0.9)
+_dash.c4.tag.Text = "R\194\178 " .. ((r2 ~= nil) and ("%.3f"):format(r2) or "\226\128\148") .. " \194\183 " .. (fit and (useQuad(fit) and "quad fit" or "linear fit") or "no fit yet")
+_dash.c4.tag.TextColor3 = bad and J.warn or J.muted
+end
+local function tickRealm()
+local node = cultState[cultActive] or cultState["Qi"]
+local prefix, tailVal = parseStage(node and node.Stage)
+local minor = node and (node.Minor or tailVal or 0) or 0
+local major = node and node.Major or 0
+local romanM = ROMAN[major] or tostring(major)
+if prefix and prefix ~= "" then
+_dash.c5.stage.Text = "Major " .. romanM .. " \226\128\148 " .. prefix .. " " .. minor
+else
+_dash.c5.stage.Text = (node and node.Stage) or "?"
+end
+_dash.c5.tick.Text = "TICK " .. tostring(cultState.TickMode or "?")
+local techs = cultState.Techniques
+local keys = {}
+if type(techs) == "table" then
+for k in pairs(techs) do keys[#keys + 1] = k end
+table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+end
+local activePath = cultActive
+local tm = node and node.TechniqueMultiplier
+for ti = 1, 6 do
+local row = _dash.c5.tech[ti]
+if ti <= #keys then
+local t = techs[keys[ti]]
+row.row.Visible = true
+row.name.Text = tostring(t.name or keys[ti])
+row.mult.Text = "\195\151" .. tostring(t.multiplier or "?")
+if t.path == activePath and t.affects_growth and t.multiplier == tm then
+row.mult.TextColor3 = J.jade
+row.name.TextColor3 = J.text
+row.tick.Visible = true
+else
+row.mult.TextColor3 = J.muted
+row.name.TextColor3 = J.textSecondary
+row.tick.Visible = false
+end
+elseif row.row.Visible then
+row.row.Visible = false
+end
+end
+_dash.c5.techCount = math.min(6, #keys)
+local parts = {}
+for _, z in ipairs(ZONES) do
+if z.path == activePath or z.path == "All" then
+parts[#parts + 1] = (qualZone(z.path, z.req) and "\226\156\147" or "\194\183") .. fmtN(z.mult) .. "\195\151"
+end
+end
+_dash.c5.zones.Text = table.concat(parts, "  ")
+end
+local function tickProfile()
+for pi = 1, 9 do
+local r = _dash.c10.rows[pi]
+local v = cultProfile[r.key]
+r.val.Text = (v ~= nil) and fmtN(v) or "?"
+end
+end
+-- ═══ RAW VIEW — old RichText dump (preserved rows + RT helpers) ═══
+local function zrow(z, active, accent, hereMult)
+local q = qualZone(z.path, z.req)
+local here = (z.mult == hereMult and (z.path == active or z.path == "All"))
+local arrow = here and colRT(accent, bRT("  \226\151\132 you")) or ""
+local tag = (z.path == "All") and colRT(RT.dim, "all") or colRT(accent, z.path:lower())
+local mt = here and heroSmRT(accent, fmtN(z.mult) .. "\195\151") or colRT(RT.text, fmtN(z.mult) .. "\195\151")
+return "   " .. (q and colRT(RT.jade, "\226\156\147") or colRT(RT.dim, "\194\183")) .. " " .. mt
+.. colRT(RT.dim, "  req" .. z.req .. " ") .. tag .. arrow
+end
+buildRawText = function()
+if not cultState then
+_dash.rawLabel.Text = colRT(RT.dim, "waiting for first Cultivation.state_updated\226\128\166\n(start meditating or wait ~1s)")
+return
+end
+local active = cultActive or "Qi"
+local idle = (normPath(cultState.ActivePath or cultState.GainPath) == nil)
+local gaining = (cultState.Meditating == true)
+local node = cultState[active]
+if not node then
+_dash.rawLabel.Text = colRT(RT.dim, "waiting for cultivation data\226\128\166")
+return
+end
+local accent = (active == "Qi") and RT.cyan or RT.warm
+local L = {}
+local stateWord
+if gaining then
+stateWord = colRT(RT.jade, "MEDITATING")
+elseif idle then
+stateWord = colRT(RT.warm, "IDLE") .. colRT(RT.dim, " \194\183 not cultivating")
+else
+stateWord = colRT(RT.warm, "IDLE")
+end
+table.insert(L, heroSmRT(accent, esc(active:upper() .. " PATH")) .. "   " .. stateWord
+.. "   " .. colRT(RT.dim, "tick=" .. esc(cultState.TickMode or "?")))
+local prefix, tailVal = parseStage(node.Stage)
+local minor = node.Minor or tailVal or 0
+local major = node.Major or 0
+local nextLabel
+if minor < 10 and prefix and prefix ~= "" then
+nextLabel = colRT(RT.dim, esc(prefix) .. " " .. (ROMAN[minor + 1] or tostring(minor + 1)))
+elseif minor >= 10 then
+nextLabel = colRT(RT.warm, "Major " .. (major + 1) .. " \194\183 Minor 1  (new tier name not broadcast)")
+else
+nextLabel = colRT(RT.dim, "Major " .. major .. " \194\183 Minor " .. (minor + 1))
+end
+table.insert(L, labelRT("REALM") .. "  " .. heroRT(accent, esc(node.Stage or "?"))
+.. "   " .. colRT(RT.dim, "M" .. major .. "\194\183m" .. minor) .. "  \226\134\146  " .. nextLabel)
+local cur = node.Current or 0
+local cost = node.BreakthroughCost or 0
+local gap = math.max(0, cost - cur)
+local frac = (cost and cost > 0) and (cur / cost) or 0
+table.insert(L, labelRT("ESSENCE") .. " " .. colRT(accent, fmtN(cur))
+.. colRT(RT.dim, "   cost ") .. colRT(RT.text, fmtN(cost)))
+table.insert(L, colRT(accent, barRT(frac)) .. "  " .. heroSmRT(RT.text, string.format("%.1f%%", frac * 100))
+.. "   " .. colRT(RT.dim, "gap ") .. colRT(RT.text, fmtN(gap)))
+local rate = cultState[active .. "EffectiveRate"] or cultState[active .. "GrowthRate"] or 0
+table.insert(L, labelRT("RATE") .. " " .. colRT(RT.text, fmtRate(rate)) .. colRT(RT.dim, " server")
+.. "   " .. colRT(RT.dim, fmtRate(cultObs.rate) .. " obs"))
+local tCost = (rate and rate > 0 and gap > 0) and (gap / rate) or (gap <= 0 and 0 or nil)
+table.insert(L, labelRT("TIME \226\134\146 COST") .. "  " .. heroRT(accent, fmtT(tCost)))
+local chance = node.BreakthroughChance or 0
+local curR = (cost and cost > 0) and (cur / cost) or 0
+local fit = fitChance()
+local chCost, modelName = chanceAtCost(fit)
+local vtx = vertexInfo(fit)
+table.insert(L, labelRT("CHANCE") .. " now " .. colRT(RT.text, pct(chance))
+.. "   " .. colRT(RT.dim, "\206\148 " .. pctSlope(cultObs.cslope) .. " obs"))
+local chCostLine = labelRT("CHANCE @ COST") .. " " .. colRT(RT.jade, pct(chCost))
+.. colRT(RT.dim, "  (" .. modelName .. " fit, n=" .. (fit and fit.n or 0) .. ")")
+if vtx and vtx.concave and vtx.ch and vtx.ch < 1 then
+chCostLine = chCostLine .. colRT(RT.warm, "  peak " .. pct(vtx.ch))
+end
+table.insert(L, chCostLine)
+table.insert(L, labelRT("ATTEMPT WHEN  \194\183 " .. modelName .. " model"))
+for _, T in ipairs({0.80, 0.90, 0.95, 0.99}) do
+local t, tag = attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
+local rhs
+if t == nil then
+rhs = colRT(RT.crimson, "\226\128\148  ") .. colRT(RT.dim, "(" .. tostring(tag) .. ")")
+elseif tag == "attempt now" then
+rhs = colRT(RT.jade, "now") .. colRT(RT.dim, "  (chance & essence both met)")
+elseif tag == "chance met now; gate = essence" then
+rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met now \194\183 gate = essence)")
+elseif tag == "ok@cost" then
+rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met by cost \194\183 gate = essence)")
+else
+rhs = colRT(accent, fmtT(t)) .. colRT(RT.warm, "  (overfill past cost)")
+end
+table.insert(L, "   \226\137\165" .. math.floor(T * 100) .. "%  \226\134\146  " .. rhs)
+end
+if modelName == "linear" then
+table.insert(L, colRT(RT.dim, "   linear slope can't see curve-bend near the top;"))
+table.insert(L, colRT(RT.dim, "   high-% rows are lower bounds until the fit gains curvature."))
+else
+table.insert(L, colRT(RT.dim, "   " .. modelName .. " fit over last " .. (fit and fit.n or 0) .. " ticks;"))
+table.insert(L, colRT(RT.dim, "   values beyond the observed band are an estimate, not a guarantee."))
+end
+if node.BreakthroughWarning and node.BreakthroughWarning ~= "" then
+table.insert(L, colRT(RT.warm, "\226\154\160 " .. esc(node.BreakthroughWarning)))
+end
+local lock = cultState.RealmLocks and cultState.RealmLocks[active]
+if lock then table.insert(L, colRT(RT.crimson, "REALM LOCKED (" .. esc(active) .. ")")) end
+table.insert(L, "")
+table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \195\151" .. esc(node.TechniqueMultiplier)))
+local techs = cultState.Techniques
+if type(techs) == "table" then
+local keys = {}
+for k in pairs(techs) do table.insert(keys, k) end
+table.sort(keys, function(a, b) return tostring(a) < tostring(b) end)
+for _, k in ipairs(keys) do
+local t = techs[k]
+if type(t) == "table" then
+local flags = (t.affects_growth and "G" or "") .. (t.affects_recovery and "R" or "")
+local isActive = (t.path == active and t.affects_growth and t.multiplier == node.TechniqueMultiplier)
+local mark = isActive and colRT(RT.jade, "  \226\151\132 equipped") or ""
+local pcol = (t.path == "Qi") and RT.cyan or RT.warm
+table.insert(L, "   \226\128\162 " .. colRT(RT.text, esc(t.name or "?"))
+.. "  " .. colRT(pcol, "\195\151" .. esc(t.multiplier or "?"))
+.. "  " .. colRT(RT.dim, "[" .. flags .. "]") .. mark)
+end
+end
+end
+local zq = cultState.ZoneMultiplierQi or 0
+local zb = cultState.ZoneMultiplierBody or 0
+local hereMult = (active == "Qi") and zq or zb
+table.insert(L, "")
+table.insert(L, labelRT("ZONES") .. colRT(RT.dim, "  in band ") .. heroSmRT(accent, fmtN(hereMult) .. "\195\151")
+.. colRT(RT.dim, "   Qi " .. fmtN(zq) .. "\195\151 \194\183 Body " .. fmtN(zb) .. "\195\151   [req\226\137\136Major]"))
+for _, z in ipairs(ZONES) do if z.path == "All" then table.insert(L, zrow(z, active, accent, hereMult)) end end
+local actRows = {}
+for _, z in ipairs(ZONES) do if z.path == active then table.insert(actRows, z) end end
+table.sort(actRows, function(a, b) return a.mult < b.mult end)
+for _, z in ipairs(actRows) do table.insert(L, zrow(z, active, accent, hereMult)) end
+local oth = (active == "Qi") and "Body" or "Qi"
+local oAcc = (oth == "Qi") and RT.cyan or RT.warm
+local oNode = cultState[oth]
+local oParts = {}
+for _, z in ipairs(ZONES) do
+if z.path == oth then
+table.insert(oParts, (qualZone(z.path, z.req) and colRT(RT.jade, "\226\156\147") or colRT(RT.dim, "\194\183"))
+.. colRT(oAcc, fmtN(z.mult) .. "\195\151") .. colRT(RT.dim, "(" .. z.req .. ")"))
+end
+end
+table.insert(L, colRT(RT.dim, "\226\150\185 " .. oth:upper()) .. "  "
+.. colRT(oAcc, oNode and esc(oNode.Stage or "?") or "?")
+.. "  " .. colRT(RT.dim, "chance ") .. colRT(RT.text, oNode and pct(oNode.BreakthroughChance) or "\226\128\148")
+.. "   " .. table.concat(oParts, "  "))
+table.insert(L, "")
+table.insert(L, labelRT("PROFILE"))
+table.insert(L, colRT(RT.dim, "Root ") .. colRT(RT.text, (cultProfile.root and fmtN(cultProfile.root) or "?"))
+.. colRT(RT.dim, "  Const ") .. colRT(RT.text, (cultProfile.const and fmtN(cultProfile.const) or "?"))
+.. colRT(RT.dim, "  Luck ") .. colRT(RT.text, (cultProfile.luck and fmtN(cultProfile.luck) or "?"))
+.. colRT(RT.dim, "  Compr ") .. colRT(RT.text, (cultProfile.compr and fmtN(cultProfile.compr) or "?")))
+table.insert(L, colRT(RT.dim, "Mastery  Forage ") .. colRT(RT.text, (cultProfile.mf and fmtN(cultProfile.mf) or "?"))
+.. colRT(RT.dim, "  Alch ") .. colRT(RT.text, (cultProfile.ma and fmtN(cultProfile.ma) or "?"))
+.. colRT(RT.dim, "  Weapon ") .. colRT(RT.text, (cultProfile.mw and fmtN(cultProfile.mw) or "?"))
+.. colRT(RT.dim, "  Skill ") .. colRT(RT.text, (cultProfile.ms and fmtN(cultProfile.ms) or "?")))
+table.insert(L, colRT(RT.dim, "SpiritStones ") .. colRT(RT.text, (cultProfile.ss and fmtN(cultProfile.ss) or "?")))
+_dash.rawLabel.Text = table.concat(L, "\n")
+end
+-- ─── AUTO-BT ENGINE (hoisted from updateStatsPage; identical conditions + state writes) ───
+local function autoBtTick()
+if autoBt.awaiting and cultState and autoBt.awaitPath then
+local n = cultState[autoBt.awaitPath]
+if n and n.Stage and n.Stage ~= autoBt.awaitStage then
+autoBt.feedback = "\226\156\147 REALM UP \226\134\146 " .. esc(n.Stage)
+autoBt.flashUntil = tick() + 2.0
+autoBt.awaiting = false
+elseif (tick() - autoBt.lastFire) > 8 then
+autoBt.feedback = "roll resolved \194\183 essence reset \194\183 re-grinding"
+autoBt.awaiting = false
+end
+end
+if autoBt.enabled and cultState then
+local realActive = normPath(cultState.ActivePath or cultState.GainPath)
+if realActive then
+local n = cultState[realActive]
+if n and n.CanBreakthrough then
+local cur2 = n.Current or 0
+local cost2 = n.BreakthroughCost or 0
+local ch2 = n.BreakthroughChance or 0
+local allowed = (realActive == "Qi") or (realActive == "Body" and autoBt.bodyEnabled)
+if allowed and cost2 > 0 and cur2 >= cost2 and ch2 >= (autoBt.minChance / 100)
+and (tick() - autoBt.bootTime) >= autoBt.bootGrace
+and (tick() - autoBt.lastFire) >= autoBt.cooldown then
+doBreakthrough(realActive)
+end
+end
+end
+end
+end
+-- ─── STATS UPDATE FUNCTION (4Hz heartbeat) ───
 updateStatsPage = function()
-    if not _statsDirty then return end
-    if not cultRichLabel then return end
-
-    if not cultState then
-        cultRichLabel.Text = colRT(RT.dim, "waiting for first Cultivation.state_updated\226\128\166\n(start meditating or wait ~1s)")
-        pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
-        return
-    end
-
-    local active = cultActive or "Qi"
-    local idle   = (normPath(cultState.ActivePath or cultState.GainPath) == nil)
-    local gaining = (cultState.Meditating == true)
-    local node   = cultState[active]
-    if not node then
-        cultRichLabel.Text = colRT(RT.dim, "waiting for cultivation data\226\128\166")
-        pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
-        return
-    end
-
-    local accent  = (active == "Qi") and RT.cyan or RT.warm
-    local accent3 = (active == "Qi") and Color3.fromRGB(96,200,214) or Color3.fromRGB(224,164,88)
-
-    -- ── dashboard scaffolding live-state update (does not touch RichText content) ──
-    -- status dot: jade when meditating, amber when idle, disabled otherwise
-    local dotColor = gaining and J.jade or (not idle and J.amber or J.disabled)
-    pcall(function() statusDot.BackgroundColor3 = dotColor end)
-    -- accent line + ambient glows follow active path (Qi cyan ↔ Body warm), tweened
-    pcall(function() TweenSvc:Create(accentLine, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = (active == "Qi") and J.jade or J.amber}):Play() end)
-    pcall(function() TweenSvc:Create(ambientA, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundColor3 = accent3}):Play() end)
-    pcall(function() TweenSvc:Create(ambientB, TweenInfo.new(0.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {BackgroundColor3 = accent3}):Play() end)
-    -- safe strip truth
-    if autoBt.enabled then
-        local bodyTag = autoBt.bodyEnabled and " · +BODY" or " · Body OFF (safe)"
-        pcall(function() safeStripLabel.Text = "AUTO-BT ON · paced breakthrough (Qi-only" .. bodyTag .. ",  ≥" .. tostring(autoBt.minChance) .. "%) · else 0 hooks" end)
-        pcall(function() safeStripLabel.TextColor3 = J.amber end)
-    else
-        pcall(function() safeStripLabel.Text = "SAFE · 0 fires · 0 hooks · reads state_updated only" end)
-        pcall(function() safeStripLabel.TextColor3 = J.jade end)
-    end
-    -- smart pill: armed/idle text + flash background on realm-up
-    do
-        local flashing = (tick() < autoBt.flashUntil)
-        if autoBt.enabled then
-            local bodySuffix = autoBt.bodyEnabled and "  +BODY" or ""
-            local liveCh = node and node.BreakthroughChance
-            local liveSuffix = (liveCh ~= nil) and ("  · now " .. pct(liveCh)) or ""
-            pcall(function()
-                autoBtPill.Text = "AUTO-BT  ON   " .. active .. "≥100%" .. bodySuffix .. liveSuffix
-                autoBtPill.TextColor3 = Color3.fromRGB(225,255,235)
-                autoBtPill.BackgroundColor3 = flashing and Color3.fromRGB(70,170,100) or Color3.fromRGB(40,96,64)
-            end)
-        else
-            pcall(function()
-                autoBtPill.Text = "AUTO-BT  OFF   (tap → arm Qi at 100%)"
-                autoBtPill.TextColor3 = Color3.fromRGB(150,162,178)
-                autoBtPill.BackgroundColor3 = Color3.fromRGB(46,51,66)
-            end)
-        end
-    end
-
-    local L = {}
-
-    -- PATH HEADER
-    local stateWord
-    if gaining then
-        stateWord = colRT(RT.jade, "MEDITATING")
-    elseif idle then
-        stateWord = colRT(RT.warm, "IDLE") .. colRT(RT.dim, " \194\183 not cultivating")
-    else
-        stateWord = colRT(RT.warm, "IDLE")
-    end
-    table.insert(L, heroSmRT(accent, esc(active:upper() .. " PATH")) .. "   " .. stateWord
-        .. "   " .. colRT(RT.dim, "tick=" .. esc(cultState.TickMode or "?")))
-
-    -- STAGE
-    local prefix, tailVal = parseStage(node.Stage)
-    local minor = node.Minor or tailVal or 0
-    local major = node.Major or 0
-    local nextLabel
-    if minor < 10 and prefix and prefix ~= "" then
-        nextLabel = colRT(RT.dim, esc(prefix) .. " " .. (ROMAN[minor+1] or tostring(minor+1)))
-    elseif minor >= 10 then
-        nextLabel = colRT(RT.warm, "Major " .. (major+1) .. " \194\183 Minor 1  (new tier name not broadcast)")
-    else
-        nextLabel = colRT(RT.dim, "Major " .. major .. " \194\183 Minor " .. (minor+1))
-    end
-    table.insert(L, labelRT("REALM") .. "  " .. heroRT(accent, esc(node.Stage or "?"))
-        .. "   " .. colRT(RT.dim, "M" .. major .. "\194\183m" .. minor) .. "  \226\134\146  " .. nextLabel)
-
-    -- ESSENCE
-    local cur   = node.Current or 0
-    local cost  = node.BreakthroughCost or 0
-    local gap   = math.max(0, cost - cur)
-    local frac  = (cost and cost > 0) and (cur / cost) or 0
-    table.insert(L, labelRT("ESSENCE") .. " " .. colRT(accent, fmtN(cur))
-        .. colRT(RT.dim, "   cost ") .. colRT(RT.text, fmtN(cost)))
-    table.insert(L, colRT(accent, barRT(frac)) .. "  " .. heroSmRT(RT.text, string.format("%.1f%%", frac*100))
-        .. "   " .. colRT(RT.dim, "gap ") .. colRT(RT.text, fmtN(gap)))
-
-    -- RATE
-    local rate = cultState[active .. "EffectiveRate"] or cultState[active .. "GrowthRate"] or 0
-    table.insert(L, labelRT("RATE") .. " " .. colRT(RT.text, fmtRate(rate)) .. colRT(RT.dim, " server")
-        .. "   " .. colRT(RT.dim, fmtRate(cultObs.rate) .. " obs"))
-
-    -- TIME TO COST
-    local tCost = (rate and rate > 0 and gap > 0) and (gap / rate) or (gap <= 0 and 0 or nil)
-    table.insert(L, labelRT("TIME \226\134\146 COST") .. "  " .. heroRT(accent, fmtT(tCost)))
-
-    -- CHANCE
-    local chance = node.BreakthroughChance or 0
-    local curR   = (cost and cost > 0) and (cur / cost) or 0
-    local fit    = fitChance()
-    local chCost, modelName = chanceAtCost(fit)
-    local vtx    = vertexInfo(fit)
-
-    table.insert(L, labelRT("CHANCE") .. " now " .. colRT(RT.text, pct(chance))
-        .. "   " .. colRT(RT.dim, "\206\148 " .. pctSlope(cultObs.cslope) .. " obs"))
-    local chCostLine = labelRT("CHANCE @ COST") .. " " .. colRT(RT.jade, pct(chCost))
-        .. colRT(RT.dim, "  (" .. modelName .. " fit, n=" .. (fit and fit.n or 0) .. ")")
-    if vtx and vtx.concave and vtx.ch and vtx.ch < 1 then
-        chCostLine = chCostLine .. colRT(RT.warm, "  peak " .. pct(vtx.ch))
-    end
-    table.insert(L, chCostLine)
-
-    -- ATTEMPT WHEN
-    table.insert(L, labelRT("ATTEMPT WHEN  \194\183 " .. modelName .. " model"))
-    for _, T in ipairs({0.80, 0.90, 0.95, 0.99}) do
-        local t, tag = attemptTimeFor(T, fit, curR, cur, cost, rate, chance)
-        local rhs
-        if t == nil then
-            rhs = colRT(RT.crimson, "\226\128\148  ") .. colRT(RT.dim, "(" .. tostring(tag) .. ")")
-        elseif tag == "attempt now" then
-            rhs = colRT(RT.jade, "now") .. colRT(RT.dim, "  (chance & essence both met)")
-        elseif tag == "chance met now; gate = essence" then
-            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met now \194\183 gate = essence)")
-        elseif tag == "ok@cost" then
-            rhs = colRT(accent, fmtT(t)) .. colRT(RT.dim, "  (chance met by cost \194\183 gate = essence)")
-        else
-            rhs = colRT(accent, fmtT(t)) .. colRT(RT.warm, "  (overfill past cost)")
-        end
-        table.insert(L, "   \226\137\165" .. math.floor(T*100) .. "%  \226\134\146  " .. rhs)
-    end
-    if modelName == "linear" then
-        table.insert(L, colRT(RT.dim, "   linear slope can't see curve-bend near the top;"))
-        table.insert(L, colRT(RT.dim, "   high-% rows are lower bounds until the fit gains curvature."))
-    else
-        table.insert(L, colRT(RT.dim, "   " .. modelName .. " fit over last " .. (fit and fit.n or 0) .. " ticks;"))
-        table.insert(L, colRT(RT.dim, "   values beyond the observed band are an estimate, not a guarantee."))
-    end
-
-    if node.BreakthroughWarning and node.BreakthroughWarning ~= "" then
-        table.insert(L, colRT(RT.warm, "\226\154\160 " .. esc(node.BreakthroughWarning)))
-    end
-    local lock = cultState.RealmLocks and cultState.RealmLocks[active]
-    if lock then table.insert(L, colRT(RT.crimson, "REALM LOCKED (" .. esc(active) .. ")")) end
-
-    -- AUTO-BT FEEDBACK (live)
-    if autoBt.awaiting and cultState and autoBt.awaitPath then
-        local n = cultState[autoBt.awaitPath]
-        if n and n.Stage and n.Stage ~= autoBt.awaitStage then
-            autoBt.feedback = "\226\156\147 REALM UP \226\134\146 " .. esc(n.Stage)
-            autoBt.flashUntil = tick() + 2.0
-            autoBt.awaiting = false
-        elseif (tick() - autoBt.lastFire) > 8 then
-            autoBt.feedback = "roll resolved \194\183 essence reset \194\183 re-grinding"
-            autoBt.awaiting = false
-        end
-    end
-    if btFeedbackLabel then
-        local flashing = (tick() < autoBt.flashUntil)
-        local fbTxt = colRT(flashing and RT.jade or RT.silver, autoBt.feedback or "\226\128\148")
-        btFeedbackLabel.Text = fbTxt
-        btFeedbackLabel.RichText = true
-        btFeedbackLabel.TextColor3 = flashing and J.jade or J.silver
-    end
-
-    -- TECHNIQUES
-    table.insert(L, "")
-    table.insert(L, labelRT("TECHNIQUES") .. colRT(RT.dim, "  active growth \195\151" .. esc(node.TechniqueMultiplier)))
-    local techs = cultState.Techniques
-    if type(techs) == "table" then
-        local keys = {}
-        for k in pairs(techs) do table.insert(keys, k) end
-        table.sort(keys, function(a,b) return tostring(a) < tostring(b) end)
-        for _, k in ipairs(keys) do
-            local t = techs[k]
-            if type(t) == "table" then
-                local flags = (t.affects_growth and "G" or "") .. (t.affects_recovery and "R" or "")
-                local isActive = (t.path == active and t.affects_growth and t.multiplier == node.TechniqueMultiplier)
-                local mark = isActive and colRT(RT.jade, "  \226\151\132 equipped") or ""
-                local pcol = (t.path == "Qi") and RT.cyan or RT.warm
-                table.insert(L, "   \226\128\162 " .. colRT(RT.text, esc(t.name or "?"))
-                    .. "  " .. colRT(pcol, "\195\151" .. esc(t.multiplier or "?"))
-                    .. "  " .. colRT(RT.dim, "[" .. flags .. "]") .. mark)
-            end
-        end
-    end
-
-    -- ZONES
-    local zq = cultState.ZoneMultiplierQi or 0
-    local zb = cultState.ZoneMultiplierBody or 0
-    local hereMult = (active == "Qi") and zq or zb
-    table.insert(L, "")
-    table.insert(L, labelRT("ZONES") .. colRT(RT.dim, "  in band ") .. heroSmRT(accent, fmtN(hereMult) .. "\195\151")
-        .. colRT(RT.dim, "   Qi " .. fmtN(zq) .. "\195\151 \194\183 Body " .. fmtN(zb) .. "\195\151   [req\226\137\136Major]"))
-    local function zrow(z)
-        local q = qualZone(z.path, z.req)
-        local here = (z.mult == hereMult and (z.path == active or z.path == "All"))
-        local arrow = here and colRT(accent, bRT("  \226\151\132 you")) or ""
-        local tag = (z.path == "All") and colRT(RT.dim, "all") or colRT(accent, z.path:lower())
-        local mt = here and heroSmRT(accent, fmtN(z.mult) .. "\195\151") or colRT(RT.text, fmtN(z.mult) .. "\195\151")
-        return "   " .. (q and colRT(RT.jade, "\226\156\147") or colRT(RT.dim, "\194\183")) .. " " .. mt
-            .. colRT(RT.dim, "  req" .. z.req .. " ") .. tag .. arrow
-    end
-    for _, z in ipairs(ZONES) do if z.path == "All" then table.insert(L, zrow(z)) end end
-    local actRows = {}
-    for _, z in ipairs(ZONES) do if z.path == active then table.insert(actRows, z) end end
-    table.sort(actRows, function(a,b) return a.mult < b.mult end)
-    for _, z in ipairs(actRows) do table.insert(L, zrow(z)) end
-    local oth = (active == "Qi") and "Body" or "Qi"
-    local oAcc = (oth == "Qi") and RT.cyan or RT.warm
-    local oNode = cultState[oth]
-    local oParts = {}
-    for _, z in ipairs(ZONES) do
-        if z.path == oth then
-            table.insert(oParts, (qualZone(z.path, z.req) and colRT(RT.jade, "\226\156\147") or colRT(RT.dim, "\194\183"))
-                .. colRT(oAcc, fmtN(z.mult) .. "\195\151") .. colRT(RT.dim, "(" .. z.req .. ")"))
-        end
-    end
-    table.insert(L, colRT(RT.dim, "\226\150\185 " .. oth:upper()) .. "  "
-        .. colRT(oAcc, oNode and esc(oNode.Stage or "?") or "?")
-        .. "  " .. colRT(RT.dim, "chance ") .. colRT(RT.text, oNode and pct(oNode.BreakthroughChance) or "\226\128\148")
-        .. "   " .. table.concat(oParts, "  "))
-
-    -- PROFILE (compact)
-    table.insert(L, "")
-    table.insert(L, labelRT("PROFILE"))
-    table.insert(L, colRT(RT.dim, "Root ") .. colRT(RT.text, (cultProfile.root and fmtN(cultProfile.root) or "?"))
-        .. colRT(RT.dim, "  Const ") .. colRT(RT.text, (cultProfile.const and fmtN(cultProfile.const) or "?"))
-        .. colRT(RT.dim, "  Luck ") .. colRT(RT.text, (cultProfile.luck and fmtN(cultProfile.luck) or "?"))
-        .. colRT(RT.dim, "  Compr ") .. colRT(RT.text, (cultProfile.compr and fmtN(cultProfile.compr) or "?")))
-    table.insert(L, colRT(RT.dim, "Mastery  Forage ") .. colRT(RT.text, (cultProfile.mf and fmtN(cultProfile.mf) or "?"))
-        .. colRT(RT.dim, "  Alch ") .. colRT(RT.text, (cultProfile.ma and fmtN(cultProfile.ma) or "?"))
-        .. colRT(RT.dim, "  Weapon ") .. colRT(RT.text, (cultProfile.mw and fmtN(cultProfile.mw) or "?"))
-        .. colRT(RT.dim, "  Skill ") .. colRT(RT.text, (cultProfile.ms and fmtN(cultProfile.ms) or "?")))
-    table.insert(L, colRT(RT.dim, "SpiritStones ") .. colRT(RT.text, (cultProfile.ss and fmtN(cultProfile.ss) or "?")))
-
-    cultRichLabel.Text = table.concat(L, "\n")
-    pcall(function() statsScroll.CanvasSize = UDim2.new(0,0,0, cultRichLabel.AbsoluteSize.Y + 24) end)
-
-    -- AUTO-BT ENGINE
-    if autoBt.enabled and cultState then
-        local realActive = normPath(cultState.ActivePath or cultState.GainPath)
-        if realActive then
-            local n = cultState[realActive]
-            if n and n.CanBreakthrough then
-                local cur2 = n.Current or 0
-                local cost2 = n.BreakthroughCost or 0
-                local ch2 = n.BreakthroughChance or 0
-                local allowed = (realActive == "Qi") or (realActive == "Body" and autoBt.bodyEnabled)
-                if allowed and cost2 > 0 and cur2 >= cost2 and ch2 >= (autoBt.minChance / 100)
-                    and (tick() - autoBt.bootTime) >= autoBt.bootGrace
-                    and (tick() - autoBt.lastFire) >= autoBt.cooldown then
-                    doBreakthrough(realActive)
-                end
-            end
-        end
-    end
-    _statsDirty = false
-end -- updateStatsPage
+if not _dashboard then return end
+if cultState then
+if not _dash.seenData then
+_dash.seenData = true
+for ci = 1, 10 do _skeleton(_dash.cards[ci], false) end
+end
+else
+if not _dash.seenEmpty then
+_dash.seenEmpty = true
+if _dashView == "raw" then _dash.rawLabel.Text = colRT(RT.dim, "waiting for first Cultivation.state_updated\226\128\166\n(start meditating or wait ~1s)") end
+end
+end
+autoBtTick()
+tickSession()
+tickSystem()
+tickNearest()
+tickEngineCard()
+if _statsDirty and cultState then
+local okD, errD = pcall(function()
+tickHeader()
+tickEssence()
+tickGauge()
+tickTrend()
+tickProjection()
+tickRealm()
+tickProfile()
+if _dashView == "raw" then buildRawText() end
+end)
+if not okD and log then log("stats tick: " .. tostring(errD), "bad") end
+_statsDirty = false
+end
+end
 
 -- install cultivation state listener (now called inside buildWindow)
 autoBt.bootTime = os.clock()
@@ -3139,13 +4018,19 @@ csPage.Parent = content.frame
 tabPages[def.name] = { contentFrame = csPage, sidebarFrame = nil }
 csPage.Visible = false
 end
--- RESIZE HANDLE (bottom-right corner)
-local resizeHandle = mk("TextButton", {Text = "⣿", Font = FONT_MONO, TextSize = 14,
-TextColor3 = J.disabled, BackgroundTransparency = 1, Size = UDim2.new(0,20,0,20),
+-- RESIZE HANDLE (20x20 bottom-right: two 1px rotated hairlines, hover gold; drag clamps 820x540 + viewport)
+	local resizeHandle = mk("TextButton", {Name = "fkResizeHandle", Text = "", BackgroundTransparency = 1, Size = UDim2.new(0,20,0,20),
 Position = UDim2.new(1,-20,1,-20), AutoButtonColor = false, ZIndex = 20, AnchorPoint = Vector2.new(0,0)},
 main.frame)
-resizeHandle.MouseEnter:Connect(function() TweenSvc:Create(resizeHandle, TweenInfo.new(0.15), {TextColor3 = J.jade}):Play() end)
-resizeHandle.MouseLeave:Connect(function() TweenSvc:Create(resizeHandle, TweenInfo.new(0.15), {TextColor3 = J.disabled}):Play() end)
+local rh1 = mk("Frame", {Size = UDim2.new(0,12,0,1), Position = UDim2.new(1,-13,1,-7), BackgroundColor3 = J.border, BorderSizePixel = 0, Rotation = 45}, resizeHandle)
+local rh2 = mk("Frame", {Size = UDim2.new(0,12,0,1), Position = UDim2.new(1,-7,1,-13), BackgroundColor3 = J.border, BorderSizePixel = 0, Rotation = 45}, resizeHandle)
+local function paintResize(h)
+local col = h and J.gold or J.border
+TweenSvc:Create(rh1, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = col}):Play()
+TweenSvc:Create(rh2, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = col}):Play()
+end
+resizeHandle.MouseEnter:Connect(function() paintResize(true) end)
+resizeHandle.MouseLeave:Connect(function() paintResize(false) end)
 local resizing = false
 local resizeStart, frameStartSize = nil, nil
 resizeHandle.InputBegan:Connect(function(inp)
@@ -3155,21 +4040,25 @@ resizeStart = inp.Position
 frameStartSize = main.frame.Size
 end
 end)
-UserInput.InputChanged:Connect(function(inp)
+local _vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or Vector2.new(1920,1080)
+track(UserInput.InputChanged:Connect(function(inp)
+if not alive or not main.frame then resizing = false; return end
 if resizing and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 local delta = inp.Position - resizeStart
-local newX = math.clamp(frameStartSize.X.Offset + delta.X, 640, 1600)
-local newY = math.clamp(frameStartSize.Y.Offset + delta.Y, 400, 1000)
+local vp = Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or _vp
+local newX = math.clamp(frameStartSize.X.Offset + delta.X, 820, vp.X)
+local newY = math.clamp(frameStartSize.Y.Offset + delta.Y, 540, vp.Y)
 main.frame.Size = UDim2.new(0, newX, 0, newY)
 CONFIG.WindowSize = Vector2.new(newX, newY)
 end
-end)
-UserInput.InputEnded:Connect(function(inp)
+end))
+track(UserInput.InputEnded:Connect(function(inp)
+if not alive or not main.frame then resizing = false; return end
 if resizing and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
 resizing = false
 saveSettings()  -- persist window size
 end
-end)
+end))
 end
 ------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
 local function armRejoin()
