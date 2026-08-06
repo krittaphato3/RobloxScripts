@@ -23,7 +23,7 @@ v5.13  --  COMPLETE UI REWORK (all v5.12 logic preserved)
        settings panel over a darkening scrim, scrollable sidebar.
 * KEPT v5.12 teleport-height anchor (feet land on the herb's plane),
        v5.11 GitHub rejoin + auto-resume, v5.10 hardening, v5.9 fixes.
-* REJOIN runs the EXACT loaded version (source embedded at boot); set getgenv().ForageKit_URL to rejoin/update from a non-main branch.
+* REJOIN runs the EXACT loaded version (source embedded at boot); fires only on a real rejoin (job change) and only while the script is armed — Unload disarms it permanently.
 Behaviour (unchanged)
 * ATTRIBUTE-based herb detection (HerbId) anywhere under Workspace.
 * Selection by HERB TYPE (farms every live instance + follows respawns).
@@ -43,6 +43,16 @@ Foraging.finish_harvest( instanceId, token, true, vpX, vpY, depth )  x2
 --   loadstring(game:HttpGet("URL"))()
 ------------------------------------------------------------------
 local _fkDebug = (type(debug) == "boolean" and debug) or false
+-- load stamps: the rejoin hook skips when unloaded (Armed=false) or when a
+-- newer load happened (Gen) or when firing without a real rejoin (Job)
+pcall(function()
+if getgenv then
+local g = getgenv()
+g.ForageKit_Job = game.JobId
+g.ForageKit_Armed = true
+g.ForageKit_Gen = (g.ForageKit_Gen or 0) + 1
+end
+end)
 local _fkFn = (function()
 local HttpService = game:GetService("HttpService")
 ------------------------------------------------------------------ debug helpers
@@ -95,12 +105,6 @@ local SaveFileName = "ForageKit_Settings.json"
 local VALID_MODES  = { Walk = true, Tween = true, Teleport = true, Adaptive = true }
 local VALID_STRATEGIES = { Nearest = true, Sequence = true }
 local FK_URL       = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/main/JianghuFull.txt"
--- override before load to rejoin/update from a non-main branch:
---   getgenv().ForageKit_URL = "https://raw.githubusercontent.com/krittaphato3/TheJianghuScript/refs/heads/<branch>/JianghuFull.txt"
-pcall(function()
-local u = getgenv and getgenv().ForageKit_URL
-if type(u) == "string" and u:find("http", 1, true) and #u < 300 then FK_URL = u end
-end)
 local function _fkFetch()
 if request then local o, r = pcall(function() return request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
 if http_request then local o, r = pcall(function() return http_request({Url = FK_URL, Method = "GET"}) end); if o and r then if type(r) == "string" then return r elseif r.Body then return r.Body end end end
@@ -3170,6 +3174,8 @@ end
 ------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
 local function armRejoin()
 local placeId = game.PlaceId
+local jobId = game.JobId
+local bootGen = (getgenv and getgenv().ForageKit_Gen) or 0
 local src = nil
 pcall(function()
 if debug then
@@ -3191,15 +3197,25 @@ if src then
 boot = string.format([==[
 repeat task.wait(1) until game:IsLoaded()
 if game.PlaceId ~= %d then return end
+if game.JobId == %q then return end
 task.wait(2)
+if getgenv and getgenv().ForageKit_Job == game.JobId then return end
+if not (getgenv and getgenv().ForageKit_Armed) then return end
+local _cur = getgenv and getgenv().ForageKit_Gen
+if _cur and %d < _cur then return end
 local s = %q
 if s then local f = loadstring(s); if f then pcall(f) end end
-]==], placeId, src)
+]==], placeId, jobId, bootGen, src)
 else
 boot = string.format([==[
 repeat task.wait(1) until game:IsLoaded()
 if game.PlaceId ~= %d then return end
+if game.JobId == %q then return end
 task.wait(2)
+if getgenv and getgenv().ForageKit_Job == game.JobId then return end
+if not (getgenv and getgenv().ForageKit_Armed) then return end
+local _cur = getgenv and getgenv().ForageKit_Gen
+if _cur and %d < _cur then return end
 local function _g(u)
 if request then local o,r=pcall(function() return request({Url=u,Method="GET"}) end) if o and r and r.Body then return r.Body end end
 if http_request then local o,r=pcall(function() return http_request({Url=u,Method="GET"}) end) if o and r and r.Body then return r.Body end end
@@ -3211,7 +3227,7 @@ local s = _g(%q)
 if s and #s > 500 and #s < 350000 and s:find("ForageKit v", 1, true) then
 local f = loadstring(s); if f then pcall(f) end
 end
-]==], placeId, FK_URL)
+]==], placeId, jobId, bootGen, FK_URL)
 end
 local q
 pcall(function() q = queue_on_teleport end)
@@ -3349,7 +3365,7 @@ stopCapture(true)
 setScanning(false)
 if _saveTask then pcall(task.cancel, _saveTask); _saveTask = nil end
 if cultConn then pcall(cultConn.Disconnect, cultConn); cultConn = nil end
-for _, c in ipairs(bag) do pcall(function() c:Disconnect() end) end
+for _, c in ipairs(bag) do pcall(function() c:Disconnect() end); pcall(task.cancel, c) end
 for m, rec in pairs(tracked) do detachRecord(rec) end
 tracked = {}
 pcall(function()
@@ -3360,6 +3376,7 @@ if guiRoot    then pcall(function() guiRoot:Destroy() end) end
 if toastHolder then pcall(function() toastHolder:Destroy() end) end
 if getgenv then getgenv().ForageKit = nil end
 pcall(function() getgenv().ForageKit_Debug = nil end)
+pcall(function() if getgenv then getgenv().ForageKit_Armed = false end end)
 end
 ------------------------------------------------------------------ input
 local CAPTURE_BLOCKED = { W = true, A = true, S = true, D = true, Space = true }
