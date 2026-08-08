@@ -142,6 +142,7 @@ sunken     = Color3.fromRGB(8,11,10),      -- BG-Sunken  wells, tracks, toggle o
 scrim      = Color3.fromRGB(0,0,0),        -- BG-Scrim   overlay
 -- borders
 border     = Color3.fromRGB(38,48,44),     -- Border-Hairline 1px edges
+hairline   = Color3.fromRGB(38,48,44),     -- Border-Hairline (alias used by BTN strokes)
 hairline2  = Color3.fromRGB(54,66,60),     -- Border-Hairline-2 dropdown/modal/selected
 focus      = Color3.fromRGB(64,196,150),   -- Border-Focus 2px focus ring
 -- text
