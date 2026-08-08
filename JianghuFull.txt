@@ -1175,9 +1175,14 @@ list = {}
 local stack = {frame}
 while #stack > 0 do
 local o = table.remove(stack)
-if o:IsA("TextLabel") then list[#list+1] = { o, "TextTransparency" }
-elseif o:IsA("ImageLabel") then list[#list+1] = { o, "ImageTransparency" }
-elseif o:IsA("Frame") or o:IsA("TextButton") or o:IsA("ImageButton") then list[#list+1] = { o, "BackgroundTransparency" }
+-- only include FULLY OPAQUE elements: designed-transparent containers, depth
+-- shadows and glows must never be flattened by a fade (that blacked out the UI)
+if o:IsA("TextLabel") then
+if o.TextTransparency == 0 then list[#list+1] = { o, "TextTransparency" } end
+elseif o:IsA("ImageLabel") then
+if o.ImageTransparency == 0 then list[#list+1] = { o, "ImageTransparency" } end
+elseif o:IsA("Frame") or o:IsA("TextButton") or o:IsA("ImageButton") then
+if o.BackgroundTransparency == 0 then list[#list+1] = { o, "BackgroundTransparency" } end
 end
 for _, c in ipairs(o:GetChildren()) do stack[#stack+1] = c end
 end
@@ -1192,30 +1197,41 @@ pcall(function() o[p] = t end)
 end
 end
 local function tweenFx(frame, t, dur, done)
--- tween each object directly (matches this file's direct-object tween style;
--- a bare property goal on the parent frame would throw for non-Frame props)
+-- tween each object directly; EVERY object is guaranteed to reach the target
+-- (direct set on Completed OR on any tween failure) so a failed/dropped tween
+-- can never leave an element stuck transparent
 local list = fxList(frame)
 local n = #list
-local pending = 0
+if n == 0 then
+if done then pcall(done) end
+return true
+end
+local pending = n
 for i = 1, n do
 local o, p = list[i][1], list[i][2]
 local ok, tw = pcall(function()
 return TweenSvc:Create(o, TweenInfo.new(dur or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { [p] = t })
 end)
+local ran = false
 if ok and tw then
-pcall(function()
+local ok2 = pcall(function()
 tw:Play()
 tw.Completed:Connect(function()
 pending = pending - 1
-if pending == 0 and done then pcall(done) end
-end)
-pending = pending + 1
-end)
-else
+if pending <= 0 then
 pcall(function() o[p] = t end)
+if done then pcall(done) end
+end
+end)
+end)
+if not ok2 then ran = false else ran = true end
+end
+if not ran then
+pcall(function() o[p] = t end)
+pending = pending - 1
 end
 end
-if pending == 0 and done then pcall(done) end
+if pending <= 0 and done then pcall(done) end
 return true
 end
 local function setWeight(t, w) pcall(function() t.FontWeight = w end) end
@@ -2071,30 +2087,40 @@ if not main.frame then return end
 if v then
 -- restored on show: a minimized window comes back with its full layout
 if minimized then setMinimized(false) end
--- show: fade + scale 0.96->1 (0.3s Cubic Out)
-_hidePending = false
-main.frame.Visible = true
-setFx(main.frame, 1)
-local sc = main.frame:FindFirstChildOfClass("UIScale")
-if sc then pcall(function() sc.Scale = 0.96 end) end
-tweenFx(main.frame, 0, 0.3)
-if sc then pcall(function() TweenSvc:Create(sc, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Scale = 1}):Play() end) end
--- content zones stagger: header/tabs/content/status fade in +0.04s apart (first show only, max 0.4s)
-if not _entered then
-_entered = true
-local zones = {headerFrame, tabsBar, content.frame, statusBar}
-for zi = 1, #zones do
-local zone = zones[zi]
-if zone then
-setFx(zone, 1)
-task.delay(0.04 * zi, function()
-pcall(function()
-tweenFx(zone, 0, 0.2)
-end)
-end)
-end
-end
-end
+	-- show: fade + scale 0.96->1 (0.3s Cubic Out)
+	_hidePending = false
+	main.frame.Visible = true
+	setFx(main.frame, 1)
+	local sc = main.frame:FindFirstChildOfClass("UIScale")
+	if sc then pcall(function() sc.Scale = 0.96 end) end
+	tweenFx(main.frame, 0, 0.3)
+	if sc then pcall(function() TweenSvc:Create(sc, TweenInfo.new(0.3, Enum.EasingStyle.Cubic, Enum.EasingDirection.Out), {Scale = 1}):Play() end) end
+	-- insurance: if the executor drops tween completion, force the window fully
+	-- opaque shortly after the fade window so it can NEVER stay black/invisible
+	task.delay(0.55, function()
+		if main.frame and main.frame.Visible then
+			pcall(function() setFx(main.frame, 0) end)
+		end
+	end)
+	-- content zones stagger: header/tabs/content/status fade in +0.04s apart (first show only, max 0.4s)
+	if not _entered then
+	_entered = true
+	local zones = {headerFrame, tabsBar, content.frame, statusBar}
+	for zi = 1, #zones do
+	local zone = zones[zi]
+	if zone then
+	setFx(zone, 1)
+	task.delay(0.04 * zi, function()
+	pcall(function()
+	tweenFx(zone, 0, 0.2)
+	end)
+	end)
+	task.delay(0.04 * zi + 0.45, function()
+	if zone and zone.Parent then pcall(function() setFx(zone, 0) end) end
+	end)
+	end
+	end
+	end
 else
 -- hide: fade 0.18s Quad In, then hide on completion (guarded against toggle races)
 _hidePending = true
@@ -3561,7 +3587,7 @@ end
 _dashGeom = function()
 local w = _dashCellW
 for _, card in pairs(_dash.cards) do
-if card and card.Parent then pcall(function() card.Size = UDim2.new(1, 0, 0, CARD_H) end) end
+if card and card.Parent then pcall(function() card.Size = UDim2.new(0, w, 0, CARD_H) end) end
 end
 local gx = math.floor(w / 2) - 40
 for i = 1, #(_dash.c2.segs or {}) do
