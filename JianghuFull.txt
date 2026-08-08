@@ -1129,6 +1129,12 @@ killAuto()
 persistAutoStart(false)
 saveSettings()
 end
+-- forward declarations: UI implementations live in the nested UI closure below
+local guiLog, guiUpdateStatus, reconcileList, buildOverlays, buildWindow, setVisible
+local setMode, keyName, startCapture, stopCapture, capturing, toggle
+local doBreakthrough, cultConn, armRejoin, esc
+local updateStatsPage
+(function()
 ------------------------------------------------------------------ UI primitives
 dbg("ui primitives")
 -- radius tokens: R0 0 / R1 4 / R2 8 / R3 12 / R-Pill 999
@@ -1568,12 +1574,12 @@ LeftBracket = "[", RightBracket = "]", Backslash = "\\", Minus = "-", Equals = "
 One = "1", Two = "2", Three = "3", Four = "4", Five = "5", Six = "6", Seven = "7", Eight = "8", Nine = "9", Zero = "0",
 F1 = "F1", F2 = "F2", F3 = "F3", F4 = "F4", F5 = "F5", F6 = "F6", F7 = "F7", F8 = "F8", F9 = "F9", F10 = "F10", F11 = "F11", F12 = "F12",
 }
-local function keyName(k)
+keyName = function(k)
 if not k then return "—" end
 return KEY_SHORT[k.Name] or k.Name
 end
-local capturing = nil
-local function stopCapture(cancel)
+capturing = nil
+stopCapture = function(cancel)
 if not capturing then return end
 if capturing.timer then pcall(task.cancel, capturing.timer); capturing.timer = nil end
 if capturing.pulse then pcall(function() capturing.pulse:Cancel() end); capturing.pulse = nil end
@@ -1587,7 +1593,7 @@ pcall(function() capturing.button.TextColor3 = J.text end)
 end
 capturing = nil
 end
-local function startCapture(action, button)
+startCapture = function(action, button)
 stopCapture(true)
 capturing = {action = action, button = button}
 button.Text = "PRESS KEY…"; button.TextColor3 = J.gold
@@ -1614,7 +1620,7 @@ good = J.ok, warn = J.textGold, bad = J.dangerText, info = J.textSecondary,
 local LOG_TICK = {
 good = J.ok, warn = J.gold, bad = J.danger, info = J.seriesIce,
 }
-local function guiLog(msg, kind)
+guiLog = function(msg, kind)
 kind = kind or "info"
 if not gui.logFrame then print("[Jianghu] " .. tostring(msg)); return end
 local col = LOG_COL[kind] or J.textSecondary
@@ -1671,7 +1677,7 @@ logRowCount = 0
 logPool = {}
 end
 ------------------------------------------------------------------ status bar + header chip
-local function guiUpdateStatus()
+guiUpdateStatus = function()
 if not gui.statMode then return end
 -- count only selected types that still have LIVE rows (stale persisted selections excluded)
 local sorted = knownSorted()
@@ -1847,7 +1853,7 @@ if on and gui.emptySub then
 gui.emptySub.Text = ("last scan  ·  %d nodes  ·  %d herbs"):format(State.lastScanNodes, State.lastScanHerbs)
 end
 end
-local function reconcileList()
+reconcileList = function()
 if not listFrame then return end
 -- prune stale harvest marks: instanceIds that no longer exist in the live
 -- scan (harvested + despawned) can never be re-picked, so drop their marks
@@ -1881,7 +1887,7 @@ setEmptyState(#sorted == 0)
 guiUpdateStatus()
 end
 ------------------------------------------------------------------ mode + selection actions
-local function setMode(m)
+setMode = function(m)
 State.mode = m
 for name, mb in pairs(modeButtons) do
 local on = name == m
@@ -1942,7 +1948,7 @@ end
 local _hidePending = false
 local _entered = false  -- first show runs the content-zone entrance stagger (UX_SPEC §4)
 local setMinimized = nil  -- forward decl (defined below; called from setVisible restore-on-show)
-local function setVisible(v)
+setVisible = function(v)
 if not main.frame then return end
 if v then
 -- restored on show: a minimized window comes back with its full layout
@@ -2001,7 +2007,7 @@ TweenSvc:Create(main.frame, TweenInfo.new(0.18, Enum.EasingStyle.Cubic, Enum.Eas
 {Size = UDim2.new(0, CONFIG.WindowSize.X, 0, CONFIG.WindowSize.Y)}):Play()
 end
 end
-local function toggle() if main.frame then setVisible(not main.frame.Visible) end end
+toggle = function() if main.frame then setVisible(not main.frame.Visible) end end
 ------------------------------------------------------------------ settings components
 function refreshSettingsHighlight()
 for group, info in pairs(settingsSegs) do
@@ -2277,7 +2283,7 @@ local body = _fkFetch()
 if not body then
 if toast then toast("update failed: could not fetch", "bad") end
 elseif _fkOk(body) then
-local fn = loadstring(body)
+local fn = loadstring and loadstring(body) or (load and load(body))
 if fn then
 local okRun = pcall(fn)
 if okRun then
@@ -2391,7 +2397,7 @@ end
 end
 end
 ------------------------------------------------------------------ build overlays
-local function buildOverlays()
+buildOverlays = function()
 guiRoot = mk("ScreenGui", {Name = "ForageKit", ResetOnSpawn = false,
 IgnoreGuiInset = true, ZIndexBehavior = Enum.ZIndexBehavior.Sibling},
 lp:FindFirstChildOfClass("PlayerGui") or lp:WaitForChild("PlayerGui"))
@@ -2637,15 +2643,14 @@ autoBt = {
 	awaiting = false, awaitPath = nil, awaitStage = nil,
 	feedback = "—", flashUntil = 0, bodyConfirmPending = false,
 }
-local updateStatsPage = nil  -- forward declaration, assigned inside buildWindow
 -- ─── AUTO-BREAKTHROUGH ENGINE (IIFE body level — accessible everywhere) ───
 local function pct(x) local n = x or 0; if n ~= n then return "--" end return ("%.1f%%"):format(n * 100) end
-local function esc(t)
+esc = function(t)
 local s = tostring(t)
 s = s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
 return s
 end
-local function doBreakthrough(path)
+doBreakthrough = function(path)
 local folder = Replicated:FindFirstChild("Network")
 if not folder then autoBt.feedback = "no network"; return end
 local cultFolder = folder:FindFirstChild("Cultivation")
@@ -2756,8 +2761,8 @@ end
 	end
 	_bodyConfirmOverlay.Visible = true
 end
-local cultConn = nil
-local function buildWindow()
+cultConn = nil
+buildWindow = function()
 -- use saved size if available, otherwise adaptive from viewport
 local aw, ah
 if CONFIG.WindowSize and CONFIG.WindowSize.X > 0 and CONFIG.WindowSize.Y > 0 then
@@ -4061,7 +4066,7 @@ end
 end))
 end
 ------------------------------------------------------------------ same-game rejoin auto-execute (GitHub pattern)
-local function armRejoin()
+armRejoin = function()
 local placeId = game.PlaceId
 local jobId = game.JobId
 local bootGen = (getgenv and getgenv().ForageKit_Gen) or 0
@@ -4093,7 +4098,7 @@ if not (getgenv and getgenv().ForageKit_Armed) then return end
 local _cur = getgenv and getgenv().ForageKit_Gen
 if _cur and %d < _cur then return end
 local s = %q
-if s then local f = loadstring(s); if f then pcall(f) end end
+if s then local f = loadstring and loadstring(s) or (load and load(s)); if f then pcall(f) end end
 ]==], placeId, jobId, bootGen, src)
 else
 boot = string.format([==[
@@ -4114,7 +4119,7 @@ local o,b=pcall(function() return game:HttpGet(u) end) if o and b then return b 
 end
 local s = _g(%q)
 if s and #s > 500 and #s < 350000 and s:find("ForageKit v", 1, true) then
-local f = loadstring(s); if f then pcall(f) end
+local f = loadstring and loadstring(s) or (load and load(s)); if f then pcall(f) end
 end
 ]==], placeId, jobId, bootGen, FK_URL)
 end
@@ -4124,6 +4129,7 @@ if not q then pcall(function() if syn then q = syn.queue_on_teleport end end) en
 if not q then pcall(function() q = queueonteleport end) end
 if q then pcall(q, boot) end
 end
+end)()
 ------------------------------------------------------------------ wire forward hooks + boot
 dbg("boot")
 log              = guiLog
