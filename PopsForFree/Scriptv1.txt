@@ -1,0 +1,690 @@
+local Players          = game:GetService("Players")
+local Workspace        = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+local HttpService      = game:GetService("HttpService")
+local LocalPlayer      = Players.LocalPlayer
+
+local function has(f) return type(f) == "function" end
+
+---------------------------------------------------------------------
+-- CONFIG (+ persistence)
+---------------------------------------------------------------------
+local CFG = {
+    ToggleKey     = Enum.KeyCode.K,
+    OrbKey        = Enum.KeyCode.H,
+    StagePart     = "SP4",
+    Anchor        = Vector3.new(170.10989379882812, 17.39298439025879, 421.0320129394531),
+    Radius        = 12,
+    StageDelayMs  = 10000,
+    PadJitterPct  = 0.15,
+    CoolDelayMs   = 2000,
+    CoolJitterPct = 0.25,
+    DropUrl       = "",   -- your ngrok base url → layer 2 refetches from your PC
+    DropKey       = "",   -- your X-Auth key
+    DropPath      = "ghost_touch_v7.lua",
+}
+
+local logsOn = true
+
+local function saveCfg()
+    if not has(writefile) then return end
+    pcall(writefile, "ghosttouch_cfg.json", HttpService:JSONEncode({
+        pad = CFG.StageDelayMs, cool = CFG.CoolDelayMs, radius = CFG.Radius,
+        logs = logsOn, anchor = { CFG.Anchor.X, CFG.Anchor.Y, CFG.Anchor.Z },
+    }))
+end
+
+if has(readfile) and has(isfile) and isfile("ghosttouch_cfg.json") then
+    local ok, t = pcall(function()
+        return HttpService:JSONDecode(readfile("ghosttouch_cfg.json"))
+    end)
+    if ok and type(t) == "table" then
+        CFG.StageDelayMs = t.pad or CFG.StageDelayMs
+        CFG.CoolDelayMs  = t.cool or CFG.CoolDelayMs
+        CFG.Radius       = t.radius or CFG.Radius
+        logsOn           = t.logs
+        if type(t.anchor) == "table" and t.anchor[1] then
+            CFG.Anchor = Vector3.new(t.anchor[1], t.anchor[2], t.anchor[3])
+        end
+    end
+end
+
+local function log(msg)
+    if logsOn then
+        print(("[GHOSTv7 %s] %s"):format(os.date("%H:%M:%S"), msg))
+    end
+end
+
+---------------------------------------------------------------------
+-- anti-afk · always on · blocks the idle kick the moment it tries
+---------------------------------------------------------------------
+local VirtualUser = game:GetService("VirtualUser")
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new(0, 0))
+    log("anti-afk ping · idle kick blocked")
+end)
+
+---------------------------------------------------------------------
+-- rejoin survival layer 1 · swallow teleports & client kicks
+---------------------------------------------------------------------
+local TeleportService = game:GetService("TeleportService")
+
+if has(getrawmetatable) and has(setreadonly) and has(newcclosure) and has(getnamecallmethod) then
+    pcall(function()
+        local mt = getrawmetatable(game)
+        setreadonly(mt, false)
+        local oldNamecall = mt.__namecall
+        mt.__namecall = newcclosure(function(self, ...)
+            local m = getnamecallmethod()
+            if typeof(self) == "Instance" then
+                if self == TeleportService
+                and (m == "Teleport" or m == "TeleportToPlaceInstance"
+                     or m == "TeleportByName" or m == "TeleportToSpawnByName") then
+                    log("rejoin blocked · " .. m .. " swallowed")
+                    return nil
+                end
+                if self == LocalPlayer and m == "Kick" then
+                    log("kick blocked")
+                    return nil
+                end
+            end
+            return oldNamecall(self, ...)
+        end)
+        setreadonly(mt, true)
+        log("rejoin blocker armed · teleports & kicks swallowed")
+    end)
+else
+    log("rejoin blocker unavailable on this executor")
+end
+
+---------------------------------------------------------------------
+-- rejoin survival layer 2 · bootstrap queued across any teleport
+---------------------------------------------------------------------
+local qf = nil
+for _, cand in ipairs({ queue_on_teleport, queueon_teleport, queueonteleport }) do
+    if type(cand) == "function" then qf = cand break end
+end
+if not qf and type(syn) == "table" and type(syn.queue_on_teleport) == "function" then
+    qf = syn.queue_on_teleport
+end
+
+if qf then
+    local fetch
+    if CFG.DropUrl ~= "" then
+        fetch = ([[local r = request({Url="%s/read?path=%s", Headers={["X-Auth"]="%s"}})
+if r and r.Body then loadstring(r.Body)() end]]):format(CFG.DropUrl, CFG.DropPath, CFG.DropKey)
+    else
+        fetch = ([[if isfile and isfile("%s") then loadstring(readfile("%s"))() end]])
+            :format(CFG.DropPath, CFG.DropPath)
+    end
+    local payload = ([[repeat task.wait(0.5) until game:GetService("Players").LocalPlayer
+and game:GetService("Players").LocalPlayer.Character
+pcall(function()
+%s
+end)]])
+        :format(fetch)
+    pcall(qf, payload)
+    log("rejoin persistence armed · bootstrap queued")
+else
+    log("queue_on_teleport missing · layer 1 blocker is your shield")
+end
+
+local UUID_PAT = "^"
+    .. string.rep("%x", 8)  .. "%-"
+    .. string.rep("%x", 4)  .. "%-"
+    .. string.rep("%x", 4)  .. "%-"
+    .. string.rep("%x", 4)  .. "%-"
+    .. string.rep("%x", 12) .. "$"
+
+---------------------------------------------------------------------
+-- detection
+---------------------------------------------------------------------
+local lastDropDist = nil
+
+local function findDropAtAnchor()
+    local best, bestD = nil, CFG.Radius
+    local function rec(o, d)
+        if d > 14 then return end
+        for _, c in ipairs(o:GetChildren()) do
+            if c:IsA("BasePart") and c.Name:match(UUID_PAT) then
+                local ok, dist = pcall(function()
+                    return (c.Position - CFG.Anchor).Magnitude
+                end)
+                if ok and dist <= bestD then
+                    best, bestD = c, dist
+                end
+            end
+            rec(c, d + 1)
+        end
+    end
+    rec(Workspace, 0)
+    lastDropDist = bestD
+    return best
+end
+
+local function findStage()
+    local p = Workspace:FindFirstChild(CFG.StagePart)
+    if p and p:IsA("BasePart") then return p end
+    local function rec(o, d)
+        if d > 14 then return nil end
+        for _, c in ipairs(o:GetChildren()) do
+            if c.Name == CFG.StagePart and c:IsA("BasePart") then return c end
+            local r = rec(c, d + 1)
+            if r then return r end
+        end
+        return nil
+    end
+    return rec(Workspace, 0)
+end
+
+---------------------------------------------------------------------
+-- palette + builders
+---------------------------------------------------------------------
+local BG      = Color3.fromRGB(17, 17, 23)
+local PANEL   = Color3.fromRGB(27, 27, 37)
+local TXT     = Color3.fromRGB(232, 232, 238)
+local DIM     = Color3.fromRGB(140, 140, 150)
+local GREEN   = Color3.fromRGB(86, 220, 130)
+local RED     = Color3.fromRGB(224, 82, 82)
+local VIOLET  = Color3.fromRGB(124, 92, 255)
+
+local function tween(obj, props, t)
+    TweenService:Create(obj,
+        TweenInfo.new(t or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        props):Play()
+end
+
+local function newFrame(parent, name, size, pos, color, radius)
+    local f = Instance.new("Frame")
+    f.Name = name
+    f.Size = size
+    f.Position = pos
+    f.BackgroundColor3 = color or PANEL
+    f.BorderSizePixel = 0
+    if radius and radius > 0 then
+        local c = Instance.new("UICorner")
+        c.CornerRadius = UDim.new(0, radius)
+        c.Parent = f
+    end
+    f.Parent = parent
+    return f
+end
+
+local function newLabel(parent, name, size, pos, text, tSize, color, align, font)
+    local l = Instance.new("TextLabel")
+    l.Name = name
+    l.BackgroundTransparency = 1
+    l.Size = size
+    l.Position = pos
+    l.Text = text
+    l.TextSize = tSize
+    l.TextColor3 = color
+    l.TextXAlignment = align or Enum.TextXAlignment.Left
+    l.Font = font or Enum.Font.Gotham
+    l.Parent = parent
+    return l
+end
+
+local function newBtn(parent, name, size, pos, text, tSize)
+    local b = Instance.new("TextButton")
+    b.Name = name
+    b.Size = size
+    b.Position = pos
+    b.BackgroundColor3 = Color3.fromRGB(34, 34, 46)
+    b.BorderSizePixel = 0
+    b.Text = text
+    b.TextSize = tSize or 10
+    b.TextColor3 = TXT
+    b.Font = Enum.Font.GothamSemibold
+    b.AutoButtonColor = false
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, 7)
+    c.Parent = b
+    local s = Instance.new("UIStroke")
+    s.Color = Color3.fromRGB(255, 255, 255)
+    s.Transparency = 0.92
+    s.Parent = b
+    b.Parent = parent
+    return b
+end
+
+---------------------------------------------------------------------
+-- window
+---------------------------------------------------------------------
+local gui = Instance.new("ScreenGui")
+gui.Name = "ghostTouchDeck"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.DisplayOrder = 999
+
+local FULL_H = 288
+local win = newFrame(gui, "win", UDim2.fromOffset(264, FULL_H), UDim2.new(0.5, -132, 0.5, -144), BG, 12)
+win.BackgroundTransparency = 0.05
+local winStroke = Instance.new("UIStroke")
+winStroke.Color = Color3.fromRGB(255, 255, 255)
+winStroke.Transparency = 0.9
+winStroke.Parent = win
+
+local header = newFrame(win, "header", UDim2.new(1, 0, 0, 30), UDim2.fromOffset(0, 0), nil, 0)
+header.BackgroundTransparency = 1
+header.Active = true
+
+newLabel(header, "title", UDim2.fromOffset(120, 30), UDim2.fromOffset(12, 0),
+    "GHOST TOUCH", 13, TXT, Enum.TextXAlignment.Left, Enum.Font.GothamSemibold)
+newLabel(header, "ver", UDim2.fromOffset(30, 30), UDim2.fromOffset(118, 0),
+    "v7", 10, DIM, Enum.TextXAlignment.Left, Enum.Font.GothamSemibold)
+
+local btnOrb = newBtn(header, "orb", UDim2.fromOffset(20, 20), UDim2.fromOffset(232, 5), "○", 11)
+local btnCollapse = newBtn(header, "collapse", UDim2.fromOffset(20, 20), UDim2.fromOffset(208, 5), "–", 11)
+
+local body = newFrame(win, "body", UDim2.new(1, 0, 1, -30), UDim2.fromOffset(0, 30), nil, 0)
+body.BackgroundTransparency = 1
+
+---------------------------------------------------------------------
+-- body: switch, status, progress, stats
+---------------------------------------------------------------------
+local switch = Instance.new("TextButton")
+switch.Name = "switch"
+switch.Size = UDim2.fromOffset(46, 24)
+switch.Position = UDim2.fromOffset(12, 10)
+switch.BackgroundColor3 = RED
+switch.BorderSizePixel = 0
+switch.Text = ""
+switch.AutoButtonColor = false
+local swCorner = Instance.new("UICorner")
+swCorner.CornerRadius = UDim.new(0, 12)
+swCorner.Parent = switch
+switch.Parent = body
+
+local knob = newFrame(switch, "knob", UDim2.fromOffset(18, 18), UDim2.fromOffset(3, 3), TXT, 9)
+
+local statusLab = newLabel(body, "status", UDim2.new(1, -70, 0, 24), UDim2.fromOffset(70, 10),
+    "off", 11, DIM, Enum.TextXAlignment.Left, Enum.Font.GothamSemibold)
+
+local progTrack = newFrame(body, "prog", UDim2.new(1, -24, 0, 4), UDim2.fromOffset(12, 40), PANEL, 2)
+local progFill = newFrame(progTrack, "fill", UDim2.new(0, 0, 1, 0), UDim2.fromOffset(0, 0), GREEN, 2)
+
+local function statBox(x, caption)
+    local b = newFrame(body, "box_" .. caption, UDim2.fromOffset(74, 32), UDim2.fromOffset(x, 52), PANEL, 8)
+    local v = newLabel(b, "v", UDim2.new(1, 0, 0.55, 0), UDim2.fromOffset(0, 1), "0", 13, TXT,
+        Enum.TextXAlignment.Center, Enum.Font.GothamSemibold)
+    newLabel(b, "c", UDim2.new(1, 0, 0.4, 0), UDim2.new(0, 0, 0.55, 0), caption, 8, DIM,
+        Enum.TextXAlignment.Center, Enum.Font.GothamSemibold)
+    return v
+end
+local gotV = statBox(12, "GOT")
+local cycV = statBox(95, "CYCLES")
+local upV  = statBox(178, "UPTIME")
+
+---------------------------------------------------------------------
+-- sliders
+---------------------------------------------------------------------
+local function newSlider(parent, name, y, min, max, step, init, fmt, onSet)
+    local holder = Instance.new("Frame")
+    holder.Name = "sl_" .. name
+    holder.BackgroundTransparency = 1
+    holder.Size = UDim2.new(1, -24, 0, 34)
+    holder.Position = UDim2.fromOffset(12, y)
+    holder.Parent = parent
+
+    newLabel(holder, "lab", UDim2.new(0.5, 0, 0, 14), UDim2.fromOffset(0, 0), name, 9, DIM,
+        Enum.TextXAlignment.Left, Enum.Font.GothamSemibold)
+    local val = newLabel(holder, "val", UDim2.new(0.5, 0, 0, 14), UDim2.new(0.5, 0, 0, 0), "", 9, TXT,
+        Enum.TextXAlignment.Right, Enum.Font.GothamSemibold)
+
+    local track = newFrame(holder, "track", UDim2.new(1, 0, 0, 6), UDim2.new(0, 0, 1, -6),
+        Color3.fromRGB(40, 40, 54), 3)
+    local fill = newFrame(track, "fill", UDim2.new(0, 0, 1, 0), UDim2.fromOffset(0, 0), VIOLET, 3)
+    local sknob = newFrame(track, "knob", UDim2.fromOffset(12, 12), UDim2.new(0, -6, 0.5, -6),
+        Color3.fromRGB(240, 240, 246), 6)
+
+    local cur = init
+    local function apply(v, fire)
+        v = math.clamp(v, min, max)
+        v = math.floor(v / step + 0.5) * step
+        cur = v
+        local frac = (max > min) and (v - min) / (max - min) or 0
+        fill.Size = UDim2.new(frac, 0, 1, 0)
+        sknob.Position = UDim2.new(frac, -6, 0.5, -6)
+        val.Text = fmt(v)
+        if fire then onSet(v) end
+    end
+
+    local dragging = false
+    track.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+        or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            local frac = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            apply(min + frac * (max - min), true)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
+                     or i.UserInputType == Enum.UserInputType.Touch) then
+            local frac = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+            apply(min + frac * (max - min), true)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+        or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+
+    apply(init, false)
+    return { get = function() return cur end }
+end
+
+newSlider(body, "PAD DELAY", 92, 1, 30, 0.5, CFG.StageDelayMs / 1000,
+    function(v) return ("%.1fs"):format(v) end,
+    function(v)
+        CFG.StageDelayMs = v * 1000
+        log("pad delay → " .. v .. "s")
+        saveCfg()
+    end)
+
+newSlider(body, "COOL", 130, 0, 10, 0.5, CFG.CoolDelayMs / 1000,
+    function(v) return ("%.1fs"):format(v) end,
+    function(v)
+        CFG.CoolDelayMs = v * 1000
+        log("cool → " .. v .. "s")
+        saveCfg()
+    end)
+
+newSlider(body, "RADIUS", 168, 2, 30, 1, CFG.Radius,
+    function(v) return ("%dst"):format(v) end,
+    function(v)
+        CFG.Radius = v
+        log("radius → " .. v .. "st")
+        saveCfg()
+    end)
+
+---------------------------------------------------------------------
+-- buttons + footer
+---------------------------------------------------------------------
+local btnAnchor = newBtn(body, "anchor", UDim2.fromOffset(118, 24), UDim2.fromOffset(12, 206), "SET ANCHOR", 10)
+local btnLogs   = newBtn(body, "logs",   UDim2.fromOffset(118, 24), UDim2.fromOffset(134, 206),
+    logsOn and "LOGS: ON" or "LOGS: OFF", 10)
+
+newLabel(body, "footer", UDim2.new(1, -24, 0, 12), UDim2.fromOffset(12, 236),
+    "K toggle · H orb · drag top bar", 9, DIM)
+local anchorLab = newLabel(body, "anchorLab", UDim2.new(1, -24, 0, 12), UDim2.fromOffset(12, 250),
+    "", 8, DIM)
+
+local function refreshAnchorLab()
+    anchorLab.Text = ("anchor %d, %d, %d"):format(CFG.Anchor.X, CFG.Anchor.Y, CFG.Anchor.Z)
+end
+refreshAnchorLab()
+
+btnAnchor.MouseButton1Click:Connect(function()
+    local char = LocalPlayer.Character
+    local root = char and char:FindFirstChild("HumanoidRootPart")
+    if not root then
+        log("SET ANCHOR failed · no root")
+        return
+    end
+    CFG.Anchor = root.Position
+    refreshAnchorLab()
+    log("anchor set to " .. tostring(CFG.Anchor))
+    saveCfg()
+end)
+
+btnLogs.MouseButton1Click:Connect(function()
+    logsOn = not logsOn
+    btnLogs.Text = logsOn and "LOGS: ON" or "LOGS: OFF"
+    log("console logs " .. (logsOn and "enabled" or "disabled"))
+    saveCfg()
+end)
+
+---------------------------------------------------------------------
+-- orb + collapse
+---------------------------------------------------------------------
+local orb = Instance.new("TextButton")
+orb.Name = "orb"
+orb.Size = UDim2.fromOffset(30, 30)
+orb.Position = UDim2.new(0.5, -15, 0, 16)
+orb.BackgroundColor3 = BG
+orb.BorderSizePixel = 0
+orb.Text = ""
+orb.AutoButtonColor = false
+orb.Visible = false
+local orbCorner = Instance.new("UICorner")
+orbCorner.CornerRadius = UDim.new(0, 15)
+orbCorner.Parent = orb
+local orbStroke = Instance.new("UIStroke")
+orbStroke.Color = Color3.fromRGB(255, 255, 255)
+orbStroke.Transparency = 0.9
+orbStroke.Parent = orb
+local orbDot = newFrame(orb, "dot", UDim2.fromOffset(10, 10), UDim2.fromOffset(10, 10), RED, 5)
+orb.Parent = gui
+
+local collapsed = false
+
+local function setCollapsed(v)
+    collapsed = v
+    body.Visible = not v
+    btnCollapse.Text = v and "+" or "–"
+    tween(win, { Size = UDim2.fromOffset(264, v and 30 or FULL_H) }, 0.18)
+end
+
+btnCollapse.MouseButton1Click:Connect(function() setCollapsed(not collapsed) end)
+
+local function setOrb(v)
+    win.Visible = not v
+    orb.Visible = v
+end
+btnOrb.MouseButton1Click:Connect(function() setOrb(true) end)
+orb.MouseButton1Click:Connect(function() setOrb(false) end)
+
+---------------------------------------------------------------------
+-- conceal + parent
+---------------------------------------------------------------------
+if type(syn) == "table" and syn.protect_gui then pcall(syn.protect_gui, gui) end
+if type(protect_gui) == "function" then pcall(protect_gui, gui) end
+gui.Parent = (type(gethui) == "function" and gethui()) or game:GetService("CoreGui")
+
+---------------------------------------------------------------------
+-- drag (header)
+---------------------------------------------------------------------
+local dragging, dragStart, startPos = false, nil, nil
+header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        dragStart = input.Position
+        startPos = win.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+                 or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        win.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + delta.X,
+            startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+
+---------------------------------------------------------------------
+-- state
+---------------------------------------------------------------------
+local enabled    = false
+local phase      = "idle"
+local waitLeft   = 0
+local phaseTotal = 1
+local got        = 0
+local cycleN     = 0
+local farmInfo   = ""
+local uptimeSec  = 0
+
+local function updateStatus()
+    local bodyText
+    if not enabled then
+        bodyText = "off"
+    elseif phase == "cool" then
+        bodyText = ("cool %.1fs"):format(math.max(waitLeft, 0))
+    elseif phase == "stage" then
+        bodyText = "arming " .. CFG.StagePart .. "…"
+    elseif phase == "wait" then
+        bodyText = ("wait %.1fs"):format(math.max(waitLeft, 0))
+    elseif phase == "farm" then
+        bodyText = farmInfo
+    elseif phase == "nostage" then
+        bodyText = CFG.StagePart .. " missing"
+    else
+        bodyText = "…"
+    end
+    statusLab.Text = bodyText
+    statusLab.TextColor3 = enabled and TXT or DIM
+end
+
+local function setEnabled(v)
+    enabled = v
+    tween(switch, { BackgroundColor3 = v and GREEN or RED })
+    tween(knob, { Position = v and UDim2.fromOffset(25, 3) or UDim2.fromOffset(3, 3) })
+    tween(orbDot, { BackgroundColor3 = v and GREEN or RED })
+    log(v and "toggled ON" or "toggled OFF")
+    updateStatus()
+end
+
+switch.MouseButton1Click:Connect(function() setEnabled(not enabled) end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == CFG.ToggleKey then
+        setEnabled(not enabled)
+    elseif input.KeyCode == CFG.OrbKey then
+        setOrb(not orb.Visible)
+    end
+end)
+
+---------------------------------------------------------------------
+-- the ritual · one clean tap per cycle on the UUID
+---------------------------------------------------------------------
+task.spawn(function()
+    local firstCycle  = true
+    local trackedDrop = nil
+    while true do
+        if not enabled then
+            phase = "idle"
+            firstCycle = true
+            trackedDrop = nil
+            task.wait(0.25)
+        else
+            local char = LocalPlayer.Character
+            local root = char and char:FindFirstChild("HumanoidRootPart")
+            local hum  = char and char:FindFirstChildOfClass("Humanoid")
+            if not root or not hum or hum.Health <= 0 then
+                phase = "idle"
+                task.wait(1)
+            else
+                if not firstCycle then
+                    phase = "cool"
+                    local c = CFG.CoolDelayMs * (1 + (math.random() * 2 - 1) * CFG.CoolJitterPct)
+                    phaseTotal = c / 1000
+                    log(("cool %.2fs"):format(c / 1000))
+                    local dl = os.clock() + c / 1000
+                    while enabled and os.clock() < dl do
+                        waitLeft = dl - os.clock()
+                        task.wait(0.2)
+                    end
+                end
+                firstCycle = false
+
+                if enabled then
+                    cycleN = cycleN + 1
+                    log(("── cycle %d ──"):format(cycleN))
+
+                    phase = "stage"
+                    phaseTotal = 1
+                    local s = findStage()
+                    if s then
+                        pcall(firetouchinterest, s, root, 0)
+                        pcall(firetouchinterest, s, root, 1)
+                        log("arm " .. CFG.StagePart .. " · single tap sent")
+                        phase = "wait"
+                    else
+                        log("arm FAILED · " .. CFG.StagePart .. " not found")
+                        phase = "nostage"
+                    end
+
+                    local d = CFG.StageDelayMs * (1 + (math.random() * 2 - 1) * CFG.PadJitterPct)
+                    phaseTotal = d / 1000
+                    log(("pad wait %.2fs"):format(d / 1000))
+                    local deadline = os.clock() + d / 1000
+                    while enabled and os.clock() < deadline do
+                        waitLeft = deadline - os.clock()
+                        task.wait(0.2)
+                    end
+
+                    if enabled then
+                        phase = "farm"
+                        phaseTotal = 1
+                        local drop = findDropAtAnchor()
+                        if drop then
+                            if trackedDrop and trackedDrop ~= drop
+                               and not trackedDrop:IsDescendantOf(game) then
+                                got = got + 1
+                                log("EATEN · got " .. got .. " · " .. trackedDrop.Name .. " vanished")
+                            end
+                            if drop ~= trackedDrop then
+                                log("lock " .. drop.Name .. " @" .. math.floor(lastDropDist + 0.5) .. "st")
+                            end
+                            trackedDrop = drop
+                            farmInfo = ("drop %dst · tapped"):format(math.floor(lastDropDist + 0.5))
+                            pcall(firetouchinterest, drop, root, 0)
+                            pcall(firetouchinterest, drop, root, 1)
+                            log("tap " .. drop.Name .. " · " .. math.floor(lastDropDist + 0.5) .. "st · once")
+
+                            task.wait(1)
+                            if trackedDrop and not trackedDrop:IsDescendantOf(game) then
+                                got = got + 1
+                                log("EATEN · got " .. got .. " · " .. trackedDrop.Name .. " vanished")
+                                trackedDrop = nil
+                            end
+                        else
+                            farmInfo = "no drop at anchor"
+                            log("farm · no drop at anchor")
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+---------------------------------------------------------------------
+-- ui heartbeat
+---------------------------------------------------------------------
+task.spawn(function()
+    while true do
+        task.wait(0.25)
+        if enabled then uptimeSec = uptimeSec + 0.25 end
+        gotV.Text = tostring(got)
+        cycV.Text = tostring(cycleN)
+        upV.Text = ("%02d:%02d"):format(math.floor(uptimeSec / 60), math.floor(uptimeSec % 60))
+        local frac = 0
+        if phase == "cool" or phase == "wait" then
+            frac = (phaseTotal > 0) and math.clamp(waitLeft / phaseTotal, 0, 1) or 0
+        elseif phase == "farm" then
+            frac = 1
+        end
+        progFill.Size = UDim2.new(frac, 0, 1, 0)
+        progFill.BackgroundColor3 = (phase == "farm") and VIOLET or GREEN
+        updateStatus()
+    end
+end)
+
+log("anti-afk armed · always on")
+log(("loaded · pad %.1fs · cool %.1fs · radius %dst · rejoin-proof"):format(
+    CFG.StageDelayMs / 1000, CFG.CoolDelayMs / 1000, CFG.Radius))
