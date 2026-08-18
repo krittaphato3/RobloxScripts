@@ -23,6 +23,15 @@ local CFG = {
     DropUrl       = "",   -- your ngrok base url → layer 2 refetches from your PC
     DropKey       = "",   -- your X-Auth key
     DropPath      = "ghost_touch_v7.lua",
+
+    -- ══ GITHUB AUTO RE-EXEC ══
+    -- Raw url of Scriptv1.txt hosted on GitHub, branch "main".
+    -- On every rejoin/forced rejoin of the SAME game, the bootstrap
+    -- re-pulls this url and loadstrings it → always runs the latest.
+    RawUrl        = "https://raw.githubusercontent.com/krittaphato3/RobloxScripts/main/PopsForFree/Scriptv1.txt",
+
+    AutoRun       = true,   -- auto-enable farming the moment the script executes
+    AutoMin       = true,   -- auto-minimize to the orb the moment it executes
 }
 
 local logsOn = true
@@ -31,7 +40,8 @@ local function saveCfg()
     if not has(writefile) then return end
     pcall(writefile, "ghosttouch_cfg.json", HttpService:JSONEncode({
         pad = CFG.StageDelayMs, cool = CFG.CoolDelayMs, radius = CFG.Radius,
-        logs = logsOn, anchor = { CFG.Anchor.X, CFG.Anchor.Y, CFG.Anchor.Z },
+        logs = logsOn, auto = CFG.AutoRun, amin = CFG.AutoMin,
+        anchor = { CFG.Anchor.X, CFG.Anchor.Y, CFG.Anchor.Z },
     }))
 end
 
@@ -44,6 +54,8 @@ if has(readfile) and has(isfile) and isfile("ghosttouch_cfg.json") then
         CFG.CoolDelayMs  = t.cool or CFG.CoolDelayMs
         CFG.Radius       = t.radius or CFG.Radius
         logsOn           = t.logs
+        if type(t.auto) == "boolean" then CFG.AutoRun = t.auto end
+        if type(t.amin) == "boolean" then CFG.AutoMin = t.amin end
         if type(t.anchor) == "table" and t.anchor[1] then
             CFG.Anchor = Vector3.new(t.anchor[1], t.anchor[2], t.anchor[3])
         end
@@ -56,34 +68,54 @@ local function log(msg)
     end
 end
 
+local unloaded = false
+local conns    = {}
+local function on(c)
+    conns[#conns + 1] = c
+    return c
+end
+
 ---------------------------------------------------------------------
 -- anti-afk · always on · blocks the idle kick the moment it tries
 ---------------------------------------------------------------------
 local VirtualUser = game:GetService("VirtualUser")
-LocalPlayer.Idled:Connect(function()
+on(LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new(0, 0))
     log("anti-afk ping · idle kick blocked")
-end)
+end))
 
 ---------------------------------------------------------------------
 -- rejoin survival layer 1 · swallow teleports & client kicks
 ---------------------------------------------------------------------
 local TeleportService = game:GetService("TeleportService")
 
+local hookMT, hookOld = nil, nil
 if has(getrawmetatable) and has(setreadonly) and has(newcclosure) and has(getnamecallmethod) then
     pcall(function()
         local mt = getrawmetatable(game)
         setreadonly(mt, false)
         local oldNamecall = mt.__namecall
+        hookMT, hookOld = mt, oldNamecall
         mt.__namecall = newcclosure(function(self, ...)
             local m = getnamecallmethod()
             if typeof(self) == "Instance" then
                 if self == TeleportService
-                and (m == "Teleport" or m == "TeleportToPlaceInstance"
-                     or m == "TeleportByName" or m == "TeleportToSpawnByName") then
-                    log("rejoin blocked · " .. m .. " swallowed")
-                    return nil
+                and (m == "Teleport" or m == "TeleportToPlaceInstance") then
+                    -- guardrail · rejoin / forced rejoin to the SAME place is
+                    -- allowed (that triggers the GitHub re-exec), changing game
+                    -- to a DIFFERENT place is swallowed.
+                    local target = select(1, ...)
+                    if tonumber(target) == game.PlaceId then
+                        log("rejoin allowed · same place " .. tostring(target) .. " → boot re-exec")
+                    else
+                        log("game change blocked · " .. m .. " → " .. tostring(target) .. " swallowed")
+                        return nil
+                    end
+                end
+                if self == TeleportService
+                and (m == "TeleportByName" or m == "TeleportToSpawnByName") then
+                    log("rejoin allowed · same-game spawn teleport (" .. m .. ")")
                 end
                 if self == LocalPlayer and m == "Kick" then
                     log("kick blocked")
@@ -93,7 +125,7 @@ if has(getrawmetatable) and has(setreadonly) and has(newcclosure) and has(getnam
             return oldNamecall(self, ...)
         end)
         setreadonly(mt, true)
-        log("rejoin blocker armed · teleports & kicks swallowed")
+        log("rejoin blocker armed · game-change teleports & kicks swallowed")
     end)
 else
     log("rejoin blocker unavailable on this executor")
@@ -111,22 +143,120 @@ if not qf and type(syn) == "table" and type(syn.queue_on_teleport) == "function"
 end
 
 if qf then
-    local fetch
-    if CFG.DropUrl ~= "" then
-        fetch = ([[local r = request({Url="%s/read?path=%s", Headers={["X-Auth"]="%s"}})
-if r and r.Body then loadstring(r.Body)() end]]):format(CFG.DropUrl, CFG.DropPath, CFG.DropKey)
-    else
-        fetch = ([[if isfile and isfile("%s") then loadstring(readfile("%s"))() end]])
-            :format(CFG.DropPath, CFG.DropPath)
+    local placeId, gameId = game.PlaceId, game.GameId
+    local payload
+    if CFG.RawUrl ~= "" then
+        -- GitHub bootstrap · guardrail → wait for game → pull Scriptv1 from the
+        -- repo's main branch → loadstring it. Same-place rejoin only.
+        payload = ([[
+-- GHOSTv7 auto re-exec · GitHub bootstrap (queued across rejoin)
+local function log(m) print("[GHOSTv7 BOOT] " .. tostring(m)) end
+local Players = game:GetService("Players")
+
+-- guardrail · only re-exec inside the same game instance we started in
+if game.PlaceId ~= %d or game.GameId ~= %d then
+    log("guardrail · game/place changed (" .. tostring(game.PlaceId) .. "/" .. tostring(game.GameId) .. ") · no re-exec")
+    return
+end
+log("guardrail ok · same game instance · waiting for game to be playable")
+
+-- wait on the game's own signals · 5s+ poll only as fallback for long loads
+if not game:IsLoaded() then
+    local c = game.Loaded:Connect(function() end)
+    while not game:IsLoaded() do task.wait(5) end
+    c:Disconnect()
+end
+while not Players.LocalPlayer do task.wait(5) end
+local lp = Players.LocalPlayer
+if not lp.Character then
+    local c = lp.CharacterAdded:Connect(function() end)
+    while not lp.Character do task.wait(5) end
+    c:Disconnect()
+end
+log("game connected & playable · pulling latest Scriptv1 from GitHub")
+
+local function fetch(url)
+    local fns = {}
+    if type(request) == "function" then fns[#fns + 1] = request end
+    if type(http_request) == "function" then fns[#fns + 1] = http_request end
+    if type(syn) == "table" and type(syn.request) == "function" then fns[#fns + 1] = syn.request end
+    for _, fn in ipairs(fns) do
+        local ok, res = pcall(fn, { Url = url })
+        if ok and type(res) == "table" and res.StatusCode == 200 and type(res.Body) == "string" then
+            return res.Body
+        end
     end
-    local payload = ([[repeat task.wait(0.5) until game:GetService("Players").LocalPlayer
-and game:GetService("Players").LocalPlayer.Character
-pcall(function()
-%s
-end)]])
-        :format(fetch)
+    return nil
+end
+
+local body
+for i = 1, 10 do
+    body = fetch("%s")
+    if body and #body > 0 then break end
+    log("GitHub fetch failed · retry " .. i .. "/10 in 5s")
+    task.wait(5)
+end
+if not body or #body == 0 then
+    log("GitHub fetch failed after retries · re-exec skipped")
+    return
+end
+if not body:find("GHOST TOUCH", 1, true) then
+    log("content check failed · not Scriptv1 · re-exec skipped")
+    return
+end
+
+local fn, err = loadstring(body)
+if not fn then
+    log("loadstring error · " .. tostring(err))
+    return
+end
+log("re-exec OK · Scriptv1 loaded from GitHub")
+pcall(fn)
+]]):format(placeId, gameId, CFG.RawUrl)
+    else
+        -- fallback · same guardrail, but reloads the local file copy instead
+        payload = ([[
+-- GHOSTv7 auto re-exec · local file bootstrap (queued across rejoin)
+local function log(m) print("[GHOSTv7 BOOT] " .. tostring(m)) end
+local Players = game:GetService("Players")
+
+if game.PlaceId ~= %d or game.GameId ~= %d then
+    log("guardrail · game/place changed · no re-exec")
+    return
+end
+
+if not game:IsLoaded() then
+    local c = game.Loaded:Connect(function() end)
+    while not game:IsLoaded() do task.wait(5) end
+    c:Disconnect()
+end
+while not Players.LocalPlayer do task.wait(5) end
+local lp = Players.LocalPlayer
+if not lp.Character then
+    local c = lp.CharacterAdded:Connect(function() end)
+    while not lp.Character do task.wait(5) end
+    c:Disconnect()
+end
+
+if not (isfile and isfile("%s")) then
+    log("local file missing · re-exec skipped")
+    return
+end
+local ok, fn = pcall(loadstring, readfile("%s"))
+if ok and fn then
+    log("re-exec OK · loaded from local file")
+    pcall(fn)
+else
+    log("re-exec failed · " .. tostring(ok and "bad chunk" or fn))
+end
+]]):format(placeId, gameId, CFG.DropPath, CFG.DropPath)
+    end
     pcall(qf, payload)
-    log("rejoin persistence armed · bootstrap queued")
+    if CFG.RawUrl ~= "" then
+        log("rejoin persistence armed · GitHub auto re-exec queued (same-game only)")
+    else
+        log("rejoin persistence armed · local file reload queued · set CFG.RawUrl for GitHub")
+    end
 else
     log("queue_on_teleport missing · layer 1 blocker is your shield")
 end
@@ -260,8 +390,10 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 999
 
 local FULL_H = 288
+local SET_H  = 380
 local win = newFrame(gui, "win", UDim2.fromOffset(264, FULL_H), UDim2.new(0.5, -132, 0.5, -144), BG, 12)
 win.BackgroundTransparency = 0.05
+win.ClipsDescendants = true
 local winStroke = Instance.new("UIStroke")
 winStroke.Color = Color3.fromRGB(255, 255, 255)
 winStroke.Transparency = 0.9
@@ -278,6 +410,7 @@ newLabel(header, "ver", UDim2.fromOffset(30, 30), UDim2.fromOffset(118, 0),
 
 local btnOrb = newBtn(header, "orb", UDim2.fromOffset(20, 20), UDim2.fromOffset(232, 5), "○", 11)
 local btnCollapse = newBtn(header, "collapse", UDim2.fromOffset(20, 20), UDim2.fromOffset(208, 5), "–", 11)
+local btnSettings = newBtn(header, "settings", UDim2.fromOffset(20, 20), UDim2.fromOffset(184, 5), "⚙", 11)
 
 local body = newFrame(win, "body", UDim2.new(1, 0, 1, -30), UDim2.fromOffset(0, 30), nil, 0)
 body.BackgroundTransparency = 1
@@ -334,6 +467,32 @@ local function newSlider(parent, name, y, min, max, step, init, fmt, onSet)
     local val = newLabel(holder, "val", UDim2.new(0.5, 0, 0, 14), UDim2.new(0.5, 0, 0, 0), "", 9, TXT,
         Enum.TextXAlignment.Right, Enum.Font.GothamSemibold)
 
+    -- click the value to type a number directly
+    local valBtn = Instance.new("TextButton")
+    valBtn.Name = "valBtn"
+    valBtn.BackgroundTransparency = 1
+    valBtn.BorderSizePixel = 0
+    valBtn.Size = val.Size
+    valBtn.Position = val.Position
+    valBtn.Text = ""
+    valBtn.Parent = holder
+    local valBox = Instance.new("TextBox")
+    valBox.Name = "valBox"
+    valBox.BackgroundColor3 = Color3.fromRGB(40, 40, 54)
+    valBox.BorderSizePixel = 0
+    valBox.Size = UDim2.new(0.5, 0, 0, 16)
+    valBox.Position = UDim2.new(0.5, 0, 0.5, -8)
+    valBox.Text = ""
+    valBox.TextSize = 9
+    valBox.TextColor3 = TXT
+    valBox.Font = Enum.Font.GothamSemibold
+    valBox.TextXAlignment = Enum.TextXAlignment.Right
+    valBox.Visible = false
+    local boxCorner = Instance.new("UICorner")
+    boxCorner.CornerRadius = UDim.new(0, 4)
+    boxCorner.Parent = valBox
+    valBox.Parent = holder
+
     local track = newFrame(holder, "track", UDim2.new(1, 0, 0, 6), UDim2.new(0, 0, 1, -6),
         Color3.fromRGB(40, 40, 54), 3)
     local fill = newFrame(track, "fill", UDim2.new(0, 0, 1, 0), UDim2.fromOffset(0, 0), VIOLET, 3)
@@ -353,27 +512,46 @@ local function newSlider(parent, name, y, min, max, step, init, fmt, onSet)
     end
 
     local dragging = false
-    track.InputBegan:Connect(function(i)
+    on(track.InputBegan:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             local frac = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
             apply(min + frac * (max - min), true)
         end
-    end)
-    UserInputService.InputChanged:Connect(function(i)
+    end))
+    on(UserInputService.InputChanged:Connect(function(i)
         if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement
                      or i.UserInputType == Enum.UserInputType.Touch) then
             local frac = math.clamp((i.Position.X - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
             apply(min + frac * (max - min), true)
         end
-    end)
-    UserInputService.InputEnded:Connect(function(i)
+    end))
+    on(UserInputService.InputEnded:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1
         or i.UserInputType == Enum.UserInputType.Touch then
             dragging = false
         end
-    end)
+    end))
+
+    on(valBtn.MouseButton1Click:Connect(function()
+        valBox.Text = tostring(cur)
+        valBox.Visible = true
+        val.Visible = false
+        valBox:CaptureFocus()
+    end))
+    on(valBox.FocusLost:Connect(function(enter)
+        valBox.Visible = false
+        val.Visible = true
+        if enter then
+            local n = tonumber(valBox.Text)
+            if n then
+                apply(n, true)
+            else
+                apply(cur, false)
+            end
+        end
+    end))
 
     apply(init, false)
     return { get = function() return cur end }
@@ -411,7 +589,7 @@ local btnLogs   = newBtn(body, "logs",   UDim2.fromOffset(118, 24), UDim2.fromOf
     logsOn and "LOGS: ON" or "LOGS: OFF", 10)
 
 newLabel(body, "footer", UDim2.new(1, -24, 0, 12), UDim2.fromOffset(12, 236),
-    "K toggle · H orb · drag top bar", 9, DIM)
+    "K toggle · H orb · ⚙ settings · drag bar/orb", 9, DIM)
 local anchorLab = newLabel(body, "anchorLab", UDim2.new(1, -24, 0, 12), UDim2.fromOffset(12, 250),
     "", 8, DIM)
 
@@ -420,7 +598,7 @@ local function refreshAnchorLab()
 end
 refreshAnchorLab()
 
-btnAnchor.MouseButton1Click:Connect(function()
+on(btnAnchor.MouseButton1Click:Connect(function()
     local char = LocalPlayer.Character
     local root = char and char:FindFirstChild("HumanoidRootPart")
     if not root then
@@ -431,14 +609,84 @@ btnAnchor.MouseButton1Click:Connect(function()
     refreshAnchorLab()
     log("anchor set to " .. tostring(CFG.Anchor))
     saveCfg()
-end)
+end))
 
-btnLogs.MouseButton1Click:Connect(function()
+on(btnLogs.MouseButton1Click:Connect(function()
     logsOn = not logsOn
     btnLogs.Text = logsOn and "LOGS: ON" or "LOGS: OFF"
     log("console logs " .. (logsOn and "enabled" or "disabled"))
     saveCfg()
-end)
+end))
+
+---------------------------------------------------------------------
+-- settings panel · gear in header
+---------------------------------------------------------------------
+local settingsPanel = newFrame(body, "settingsPanel", UDim2.new(1, 0, 0, 84), UDim2.fromOffset(0, 262), nil, 0)
+settingsPanel.BackgroundTransparency = 1
+settingsPanel.Visible = false
+
+local function miniSwitch(x, y, label, get, set)
+    local sw = Instance.new("TextButton")
+    sw.Name = "sw_" .. label
+    sw.Size = UDim2.fromOffset(36, 18)
+    sw.Position = UDim2.fromOffset(x, y)
+    sw.BackgroundColor3 = RED
+    sw.BorderSizePixel = 0
+    sw.Text = ""
+    sw.AutoButtonColor = false
+    local swc = Instance.new("UICorner")
+    swc.CornerRadius = UDim.new(0, 9)
+    swc.Parent = sw
+    sw.Parent = settingsPanel
+    local swKnob = newFrame(sw, "knob", UDim2.fromOffset(14, 14), UDim2.fromOffset(3, 2), TXT, 7)
+    newLabel(settingsPanel, "lab_" .. label, UDim2.new(1, -60, 0, 20), UDim2.fromOffset(x + 44, y),
+        label, 9, DIM, Enum.TextXAlignment.Left, Enum.Font.GothamSemibold)
+    local function paint(v)
+        tween(sw, { BackgroundColor3 = v and GREEN or RED })
+        tween(swKnob, { Position = v and UDim2.fromOffset(19, 2) or UDim2.fromOffset(3, 2) })
+    end
+    paint(get())
+    on(sw.MouseButton1Click:Connect(function()
+        local v = not get()
+        set(v)
+        paint(v)
+        saveCfg()
+    end))
+end
+
+miniSwitch(12, 0, "AUTO RUN", function() return CFG.AutoRun end,
+    function(v) CFG.AutoRun = v log("auto run → " .. tostring(v)) end)
+miniSwitch(150, 0, "AUTO MIN", function() return CFG.AutoMin end,
+    function(v) CFG.AutoMin = v log("auto min → " .. tostring(v)) end)
+
+local btnRejoin = newBtn(settingsPanel, "rejoin", UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 24), "REJOIN TEST", 10)
+local btnUnload = newBtn(settingsPanel, "unload", UDim2.new(1, -24, 0, 24), UDim2.fromOffset(12, 52), "UNLOAD SCRIPT", 10)
+btnUnload.BackgroundColor3 = Color3.fromRGB(122, 42, 42)
+
+local function unloadScript()
+    if unloaded then return end
+    unloaded = true
+    log("UNLOAD · bye")
+    if hookMT and hookOld then
+        pcall(function()
+            setreadonly(hookMT, false)
+            hookMT.__namecall = hookOld
+            setreadonly(hookMT, true)
+        end)
+    end
+    for _, c in ipairs(conns) do
+        pcall(function() c:Disconnect() end)
+    end
+    pcall(function() gui:Destroy() end)
+end
+
+on(btnRejoin.MouseButton1Click:Connect(function()
+    log("REJOIN TEST · teleport to same place " .. tostring(game.PlaceId) .. " → watch for auto re-exec")
+    pcall(TeleportService.Teleport, TeleportService, game.PlaceId)
+end))
+on(btnUnload.MouseButton1Click:Connect(function()
+    unloadScript()
+end))
 
 ---------------------------------------------------------------------
 -- orb + collapse
@@ -462,23 +710,44 @@ orbStroke.Parent = orb
 local orbDot = newFrame(orb, "dot", UDim2.fromOffset(10, 10), UDim2.fromOffset(10, 10), RED, 5)
 orb.Parent = gui
 
-local collapsed = false
+local collapsed  = false
+local settingsOn = false
+local orbDragged = false
+
+local function applyWinSize()
+    local h = collapsed and 30 or (settingsOn and SET_H or FULL_H)
+    tween(win, {
+        Size     = UDim2.fromOffset(264, h),
+        Position = UDim2.new(0.5, -132, 0.5, -math.floor(h / 2)),
+    }, 0.18)
+end
+
+local function setSettings(v)
+    settingsOn = v
+    settingsPanel.Visible = v
+    applyWinSize()
+end
 
 local function setCollapsed(v)
     collapsed = v
     body.Visible = not v
     btnCollapse.Text = v and "+" or "–"
-    tween(win, { Size = UDim2.fromOffset(264, v and 30 or FULL_H) }, 0.18)
+    if v then setSettings(false) end
+    applyWinSize()
 end
 
-btnCollapse.MouseButton1Click:Connect(function() setCollapsed(not collapsed) end)
+on(btnCollapse.MouseButton1Click:Connect(function() setCollapsed(not collapsed) end))
+on(btnSettings.MouseButton1Click:Connect(function() setSettings(not settingsOn) end))
 
 local function setOrb(v)
     win.Visible = not v
     orb.Visible = v
 end
-btnOrb.MouseButton1Click:Connect(function() setOrb(true) end)
-orb.MouseButton1Click:Connect(function() setOrb(false) end)
+on(btnOrb.MouseButton1Click:Connect(function() setOrb(true) end))
+on(orb.MouseButton1Click:Connect(function()
+    if orbDragged then orbDragged = false return end
+    setOrb(false)
+end))
 
 ---------------------------------------------------------------------
 -- conceal + parent
@@ -491,15 +760,35 @@ gui.Parent = (type(gethui) == "function" and gethui()) or game:GetService("CoreG
 -- drag (header)
 ---------------------------------------------------------------------
 local dragging, dragStart, startPos = false, nil, nil
-header.InputBegan:Connect(function(input)
+local orbDragging, orbDragStart, orbStartPos = false, nil, nil
+
+on(header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
     or input.UserInputType == Enum.UserInputType.Touch then
         dragging = true
         dragStart = input.Position
         startPos = win.Position
     end
-end)
-UserInputService.InputChanged:Connect(function(input)
+end))
+on(orb.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        orbDragging = true
+        orbDragged = false
+        orbDragStart = input.Position
+        orbStartPos = orb.Position
+    end
+end))
+on(UserInputService.InputChanged:Connect(function(input)
+    if orbDragging and (input.UserInputType == Enum.UserInputType.MouseMovement
+                     or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - orbDragStart
+        if delta.Magnitude > 3 then orbDragged = true end
+        orb.Position = UDim2.new(
+            orbStartPos.X.Scale, orbStartPos.X.Offset + delta.X,
+            orbStartPos.Y.Scale, orbStartPos.Y.Offset + delta.Y)
+        return
+    end
     if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement
                  or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - dragStart
@@ -507,13 +796,14 @@ UserInputService.InputChanged:Connect(function(input)
             startPos.X.Scale, startPos.X.Offset + delta.X,
             startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
-end)
-UserInputService.InputEnded:Connect(function(input)
+end))
+on(UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
     or input.UserInputType == Enum.UserInputType.Touch then
         dragging = false
+        orbDragging = false
     end
-end)
+end))
 
 ---------------------------------------------------------------------
 -- state
@@ -557,16 +847,16 @@ local function setEnabled(v)
     updateStatus()
 end
 
-switch.MouseButton1Click:Connect(function() setEnabled(not enabled) end)
+on(switch.MouseButton1Click:Connect(function() setEnabled(not enabled) end))
 
-UserInputService.InputBegan:Connect(function(input, processed)
+on(UserInputService.InputBegan:Connect(function(input, processed)
     if processed then return end
     if input.KeyCode == CFG.ToggleKey then
         setEnabled(not enabled)
     elseif input.KeyCode == CFG.OrbKey then
         setOrb(not orb.Visible)
     end
-end)
+end))
 
 ---------------------------------------------------------------------
 -- the ritual · one clean tap per cycle on the UUID
@@ -574,7 +864,7 @@ end)
 task.spawn(function()
     local firstCycle  = true
     local trackedDrop = nil
-    while true do
+    while not unloaded do
         if not enabled then
             phase = "idle"
             firstCycle = true
@@ -594,7 +884,7 @@ task.spawn(function()
                     phaseTotal = c / 1000
                     log(("cool %.2fs"):format(c / 1000))
                     local dl = os.clock() + c / 1000
-                    while enabled and os.clock() < dl do
+                    while enabled and not unloaded and os.clock() < dl do
                         waitLeft = dl - os.clock()
                         task.wait(0.2)
                     end
@@ -622,7 +912,7 @@ task.spawn(function()
                     phaseTotal = d / 1000
                     log(("pad wait %.2fs"):format(d / 1000))
                     local deadline = os.clock() + d / 1000
-                    while enabled and os.clock() < deadline do
+                    while enabled and not unloaded and os.clock() < deadline do
                         waitLeft = deadline - os.clock()
                         task.wait(0.2)
                     end
@@ -667,7 +957,7 @@ end)
 -- ui heartbeat
 ---------------------------------------------------------------------
 task.spawn(function()
-    while true do
+    while not unloaded do
         task.wait(0.25)
         if enabled then uptimeSec = uptimeSec + 0.25 end
         gotV.Text = tostring(got)
@@ -685,6 +975,11 @@ task.spawn(function()
     end
 end)
 
+-- apply persisted startup behavior
+if CFG.AutoMin then setOrb(true) end
+if CFG.AutoRun then setEnabled(true) end
+
 log("anti-afk armed · always on")
-log(("loaded · pad %.1fs · cool %.1fs · radius %dst · rejoin-proof"):format(
-    CFG.StageDelayMs / 1000, CFG.CoolDelayMs / 1000, CFG.Radius))
+log(("loaded · pad %.1fs · cool %.1fs · radius %dst · same-game rejoin auto re-exec: %s"):format(
+    CFG.StageDelayMs / 1000, CFG.CoolDelayMs / 1000, CFG.Radius,
+    CFG.RawUrl ~= "" and "GITHUB" or "LOCAL FILE (set CFG.RawUrl)"))
